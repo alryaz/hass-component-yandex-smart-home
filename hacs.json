@@ -1,4 +1,10 @@
 {
   "name": "Yandex Smart Home",
-  "country": ["RU", "BY"]
+  "iot_class": "Cloud Push",
+  "content_in_root": false,
+  "zip_release": false,
+  "domains": ["yandex_smart_home"],
+  "country": ["RU", "BY"],
+  "render_readme": false,
+  "homeassistant": "0.96.0"
 }
