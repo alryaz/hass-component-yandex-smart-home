@@ -57,4 +57,8 @@ yandex_smart_home:
         part of TVs (TVs that support channel change via passing number as media_content_id)
       relative_volume_only:
         (boolean) (Optional) (media_player only) Force disable ability to get/set volume by number
+      sources:
+        (dict, boolean) (Optional) (media_player only) Define selectable inputs (or map one-to-one in case of 'true').
+        one / two / three / ... / ten:
+          (string) (Optional) Source name <=> Input source mapping.
 ```

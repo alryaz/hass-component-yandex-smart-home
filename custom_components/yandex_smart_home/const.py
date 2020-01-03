@@ -22,6 +22,8 @@ CONF_FILTER = 'filter'
 CONF_ROOM = 'room'
 CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID = 'channel_set_via_media_content_id'
 CONF_RELATIVE_VOLUME_ONLY = 'relative_volume_only'
+CONF_INPUT_SOURCES = 'sources'
+CONF_CONTROLS_SWITCH = 'controls_switch'
 
 
 PREFIX_TYPES = 'devices.types.'
@@ -72,4 +74,9 @@ DOMAIN_TO_YANDEX_TYPES = {
 
 DEVICE_CLASS_TO_YANDEX_TYPES = {
     (media_player.DOMAIN, media_player.DEVICE_CLASS_TV): TYPE_MEDIA_DEVICE_TV,
+}
+
+MODES_NUMERIC = {
+    'one', 'two', 'three', 'four', 'five',
+    'six', 'seven', 'eight', 'nine', 'ten'
 }

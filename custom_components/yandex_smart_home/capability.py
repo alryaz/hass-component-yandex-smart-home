@@ -31,7 +31,8 @@ from homeassistant.util import color as color_util
 from .const import (
     ERR_INVALID_VALUE,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
-    CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY)
+    CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY,
+    CONF_INPUT_SOURCES, MODES_NUMERIC, CONF_CONTROLS_SWITCH)
 from .error import SmartHomeError
 
 _LOGGER = logging.getLogger(__name__)
@@ -157,7 +158,7 @@ class OnOffCapability(_Capability):
         """Set device state."""
         domain = self.state.domain
 
-        if type(state['value']) is not bool:
+        if not isinstance(state['value'], bool):
             raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
 
         service_domain = domain
@@ -192,14 +193,24 @@ class OnOffCapability(_Capability):
         }, blocking=self.state.domain != script.DOMAIN, context=data.context)
 
 
-@register_capability
-class ToggleCapability(_Capability):
-    """Mute and unmute functionality.
+class _ToggleCapability(_Capability):
+    """Base toggle functionality.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-docpage/
     """
-
     type = CAPABILITIES_TOGGLE
+
+    def parameters(self):
+        """Return parameters for a devices request."""
+        return {
+            'instance': self.instance
+        }
+
+
+@register_capability
+class MuteCapability(_ToggleCapability):
+    """Mute and unmute functionality."""
+
     instance = 'mute'
 
     @staticmethod
@@ -207,12 +218,6 @@ class ToggleCapability(_Capability):
         """Test if state is supported."""
         return domain == media_player.DOMAIN and features & \
             media_player.SUPPORT_VOLUME_MUTE
-
-    def parameters(self):
-        """Return parameters for a devices request."""
-        return {
-            'instance': self.instance
-        }
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -222,7 +227,7 @@ class ToggleCapability(_Capability):
 
     async def set_state(self, data, state):
         """Set device state."""
-        if type(state['value']) is not bool:
+        if not isinstance(state['value'], bool):
             raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
 
         muted = self.state.attributes.get(media_player.ATTR_MEDIA_VOLUME_MUTED)
@@ -246,6 +251,66 @@ class _ModeCapability(_Capability):
     """
 
     type = CAPABILITIES_MODE
+
+
+@register_capability
+class InputSourceCapability(_ModeCapability):
+    """Input source functionality"""
+
+    instance = 'input_source'
+    retrievable = True
+
+    @staticmethod
+    def supported(domain, features, entity_config):
+        """Test if state is supported."""
+        return domain == media_player.DOMAIN and (
+            features & media_player.SUPPORT_SELECT_SOURCE and \
+                entity_config.get(CONF_INPUT_SOURCES)
+        )
+
+    def parameters(self):
+        """Return parameters for a devices request."""
+        input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
+        if input_sources == True:
+            input_sources = [{"value": value} for value in MODES_NUMERIC]
+        else:
+            input_sources = [{"value": key} for key in sorted(input_sources.keys())]
+
+        return {
+            'instance': self.instance,
+            'modes': input_sources
+        }
+
+    def get_value(self):
+        """Return the state value of this capability for this entity."""
+        input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
+        current_input_source = self.state.attributes.get(media_player.ATTR_INPUT_SOURCE)
+
+        if input_sources == True:
+            if current_input_source in MODES_NUMERIC:
+                return current_input_source
+
+        else:
+            for numeric_name, input_source in input_sources.items():
+                if input_source == current_input_source:
+                    return numeric_name
+
+        return 'auto'
+
+    async def set_state(self, data, state):
+        input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
+        if input_sources == True:
+            input_source = state['value']
+        else:
+            input_source = input_sources.get(state['value'], 'auto')
+
+        """Set device state."""
+        await self.hass.services.async_call(
+            media_player.DOMAIN,
+            media_player.SERVICE_SELECT_SOURCE, {
+                ATTR_ENTITY_ID: self.state.entity_id,
+                media_player.const.ATTR_INPUT_SOURCE: input_source,
+            }, blocking=True, context=data.context)
 
 
 @register_capability
