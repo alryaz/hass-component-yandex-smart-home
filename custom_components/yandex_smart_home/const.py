@@ -24,6 +24,9 @@ CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID = 'channel_set_via_media_content_id'
 CONF_RELATIVE_VOLUME_ONLY = 'relative_volume_only'
 CONF_INPUT_SOURCES = 'sources'
 CONF_CONTROLS_SWITCH = 'controls_switch'
+CONF_ENTITY_BACKLIGHT = 'backlight'
+CONF_SCRIPT_CHANNEL_UP = 'channel_up'
+CONF_SCRIPT_CHANNEL_DOWN = 'channel_down'
 
 
 PREFIX_TYPES = 'devices.types.'

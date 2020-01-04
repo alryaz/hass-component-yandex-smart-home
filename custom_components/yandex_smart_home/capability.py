@@ -17,6 +17,7 @@ from homeassistant.components import (
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_SUPPORTED_FEATURES,
+    ATTR_DEVICE_CLASS,
     SERVICE_CLOSE_COVER,
     SERVICE_OPEN_COVER,
     SERVICE_TURN_OFF,
@@ -27,12 +28,15 @@ from homeassistant.const import (
 )
 from homeassistant.core import DOMAIN as HA_DOMAIN
 from homeassistant.util import color as color_util
+from homeassistant.helpers.script import Script
 
 from .const import (
     ERR_INVALID_VALUE,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY,
-    CONF_INPUT_SOURCES, MODES_NUMERIC, CONF_CONTROLS_SWITCH)
+    CONF_INPUT_SOURCES, MODES_NUMERIC, CONF_CONTROLS_SWITCH,
+    CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN,
+    CONF_ENTITY_BACKLIGHT)
 from .error import SmartHomeError
 
 _LOGGER = logging.getLogger(__name__)
@@ -117,9 +121,16 @@ class OnOffCapability(_Capability):
             script.DOMAIN
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain in (
+        if state.domain == vacuum.DOMAIN:
+            features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+            return ((features & vacuum.SUPPORT_START
+                    and (features & vacuum.SUPPORT_RETURN_HOME
+                        or features & vacuum.SUPPORT_STOP)
+                    ) or (features & vacuum.SUPPORT_TURN_ON
+                        and features & vacuum.SUPPORT_TURN_OFF))
+        elif state.domain in (
             cover.DOMAIN,
             group.DOMAIN,
             input_boolean.DOMAIN,
@@ -130,13 +141,9 @@ class OnOffCapability(_Capability):
             climate.DOMAIN,
             scene.DOMAIN,
             script.DOMAIN,
-        ) or (vacuum.DOMAIN
-               and ((features & vacuum.SUPPORT_START
-                     and (features & vacuum.SUPPORT_RETURN_HOME
-                          or features & vacuum.SUPPORT_STOP)
-                     ) or (features & vacuum.SUPPORT_TURN_ON
-                           and features & vacuum.SUPPORT_TURN_OFF
-                           )))
+        ):
+            return True
+        return False
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -214,10 +221,11 @@ class MuteCapability(_ToggleCapability):
     instance = 'mute'
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and features & \
-            media_player.SUPPORT_VOLUME_MUTE
+        return state.domain == media_player.DOMAIN and \
+            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & \
+                media_player.SUPPORT_VOLUME_MUTE
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -243,6 +251,57 @@ class MuteCapability(_ToggleCapability):
             }, blocking=True, context=data.context)
 
 
+@register_capability
+class BacklightCapability(_ToggleCapability):
+    """Backlight functionality"""
+
+    instance = "backlight"
+
+    @staticmethod
+    def supported(state, entity_config):
+        """Test if state is supported."""
+        return entity_config.get(CONF_ENTITY_BACKLIGHT) and (
+            state.domain in (light.DOMAIN, switch.DOMAIN) or (
+                state.domain == media_player.DOMAIN and
+                state.attributes.get(ATTR_DEVICE_CLASS) == media_player.DEVICE_CLASS_TV))
+
+    @property
+    def entity_id(self):
+        return self.entity_config.get(CONF_ENTITY_BACKLIGHT)
+
+    def _get_backlight_device_state(self):
+        state = self.hass.states.get(self.entity_id)
+
+        if not state:
+            _LOGGER.error('State entity [%s] for capability does not exist (yet)!' % self.entity_id)
+            raise SmartHomeError(ERR_NOT_SUPPORTED_IN_CURRENT_MODE, "Backlight device not found")
+
+        return state
+
+    def get_value(self):
+        """Return the state of backlight for this entity."""
+
+
+        return self._get_backlight_device_state() != STATE_OFF
+
+    async def set_state(self, data, state):
+        """Set backlight state."""
+        if not isinstance(state['value'], bool):
+            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
+
+        # the following will throw a barrier exception
+        self._get_backlight_device_state()
+
+        entity_id = self.entity_config.get(CONF_ENTITY_BACKLIGHT)
+
+        service = SERVICE_TURN_ON if state['value'] else SERVICE_TURN_OFF
+
+        await self.hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self.entity_id
+        }, blocking=False, context=data.context)
+
+
+
 class _ModeCapability(_Capability):
     """Base class of capabilities with mode functionality like thermostat mode
     or fan speed.
@@ -261,10 +320,10 @@ class InputSourceCapability(_ModeCapability):
     retrievable = True
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and (
-            features & media_player.SUPPORT_SELECT_SOURCE and \
+        return state.domain == media_player.DOMAIN and (
+            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_SELECT_SOURCE and \
                 entity_config.get(CONF_INPUT_SOURCES)
         )
 
@@ -328,9 +387,9 @@ class ThermostatCapability(_ModeCapability):
     }
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == climate.DOMAIN
+        return state.domain == climate.DOMAIN
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -388,12 +447,12 @@ class FanSpeedCapability(_ModeCapability):
     }
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        if domain == climate.DOMAIN:
-            return features & climate.SUPPORT_FAN_MODE
-        elif domain == fan.DOMAIN:
-            return features & fan.SUPPORT_SET_SPEED
+        if state.domain == climate.DOMAIN:
+            return state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & climate.SUPPORT_FAN_MODE
+        elif state.domain == fan.DOMAIN:
+            return state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & fan.SUPPORT_SET_SPEED
         return False
 
     def parameters(self):
@@ -498,9 +557,9 @@ class TemperatureCapability(_RangeCapability):
     instance = 'temperature'
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == climate.DOMAIN and features & \
+        return state.domain == climate.DOMAIN and state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & \
             climate.const.SUPPORT_TARGET_TEMPERATURE
 
     def parameters(self):
@@ -542,9 +601,10 @@ class BrightnessCapability(_RangeCapability):
     instance = 'brightness'
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == light.DOMAIN and features & light.SUPPORT_BRIGHTNESS
+        return state.domain == light.DOMAIN and \
+            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & light.SUPPORT_BRIGHTNESS
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -589,10 +649,10 @@ class VolumeCapability(_RangeCapability):
         self.retrievable = features & media_player.SUPPORT_VOLUME_SET != 0
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and features & \
-            media_player.SUPPORT_VOLUME_STEP
+        return state.domain == media_player.DOMAIN and \
+            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_VOLUME_STEP
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -654,21 +714,37 @@ class ChannelCapability(_RangeCapability):
 
     instance = 'channel'
 
+    script_channel_up = None
+    script_channel_down = None
+
     def __init__(self, hass, state, config):
         super().__init__(hass, state, config)
         features = self.state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
         self.retrievable = features & media_player.SUPPORT_PLAY_MEDIA != 0 and \
             self.entity_config.get(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID)
 
+        channel_up = config.get(CONF_SCRIPT_CHANNEL_UP)
+        if channel_up:
+            self.script_channel_up = Script(hass, channel_up)
+
+        channel_down = config.get(CONF_SCRIPT_CHANNEL_DOWN)
+        if channel_down:
+            self.script_channel_down = Script(hass, channel_down)
+
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and (
-                (features & media_player.SUPPORT_PLAY_MEDIA and
-                    entity_config.get(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID)) or (
-                    features & media_player.SUPPORT_PREVIOUS_TRACK
-                    and features & media_player.SUPPORT_NEXT_TRACK)
-        )
+        if state.domain == media_player.DOMAIN:
+            features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+
+            return (features & media_player.SUPPORT_PLAY_MEDIA and
+                    entity_config.get(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID) and
+                    (features & media_player.SUPPORT_PREVIOUS_TRACK or
+                        entity_config.get(CONF_SCRIPT_CHANNEL_DOWN)) and
+                    (features & media_player.SUPPORT_NEXT_TRACK) or
+                        entity_config.get(CONF_SCRIPT_CHANNEL_UP))
+
+        return False
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -706,14 +782,24 @@ class ChannelCapability(_RangeCapability):
         """Set device state."""
         if 'relative' in state and state['relative']:
             if state['value'] > 0:
-                service = media_player.SERVICE_MEDIA_NEXT_TRACK
+                if self.script_channel_up:
+                    await self.script_channel_up.async_run(context=data.context)
+                    return
+                else:
+                    service = media_player.SERVICE_MEDIA_NEXT_TRACK
             else:
-                service = media_player.SERVICE_MEDIA_PREVIOUS_TRACK
+                if self.script_channel_down:
+                    await self.script_channel_down.async_run(context=data.context)
+                    return
+                else:
+                    service = media_player.SERVICE_MEDIA_PREVIOUS_TRACK
+
             await self.hass.services.async_call(
                 media_player.DOMAIN,
                 service, {
                     ATTR_ENTITY_ID: self.state.entity_id
                 }, blocking=True, context=data.context)
+
         else:
             await self.hass.services.async_call(
                 media_player.DOMAIN,
@@ -760,9 +846,10 @@ class RgbCapability(_ColorSettingCapability):
     instance = 'rgb'
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == light.DOMAIN and features & light.SUPPORT_COLOR
+        return state.domain == light.DOMAIN and \
+            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & light.SUPPORT_COLOR
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -797,9 +884,10 @@ class TemperatureKCapability(_ColorSettingCapability):
     instance = 'temperature_k'
 
     @staticmethod
-    def supported(domain, features, entity_config):
+    def supported(state, entity_config):
         """Test if state is supported."""
-        return domain == light.DOMAIN and features & light.SUPPORT_COLOR_TEMP
+        return state.domain == light.DOMAIN and \
+            state.attributes.get(ATTR_SUPPORTED_FEATURES) & light.SUPPORT_COLOR_TEMP
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
