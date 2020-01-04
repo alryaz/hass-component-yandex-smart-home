@@ -27,6 +27,7 @@ CONF_CONTROLS_SWITCH = 'controls_switch'
 CONF_ENTITY_BACKLIGHT = 'backlight'
 CONF_SCRIPT_CHANNEL_UP = 'channel_up'
 CONF_SCRIPT_CHANNEL_DOWN = 'channel_down'
+CONF_EXPOSE_AS = 'expose_as'
 
 
 PREFIX_TYPES = 'devices.types.'

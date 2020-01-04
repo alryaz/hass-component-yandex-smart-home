@@ -1,4 +1,6 @@
 """Helper classes for Yandex Smart Home integration."""
+import logging
+
 from asyncio import gather
 from collections.abc import Mapping
 
@@ -12,10 +14,11 @@ from . import capability
 from .const import (
     DEVICE_CLASS_TO_YANDEX_TYPES, DOMAIN_TO_YANDEX_TYPES,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE, ERR_DEVICE_UNREACHABLE,
-    ERR_INVALID_VALUE, CONF_ROOM,
+    ERR_INVALID_VALUE, CONF_ROOM, PREFIX_TYPES, CONF_EXPOSE_AS,
 )
 from .error import SmartHomeError
 
+_LOGGER = logging.getLogger(__name__)
 
 class Config:
     """Hold the configuration for Yandex Smart Home."""
@@ -24,6 +27,10 @@ class Config:
         """Initialize the configuration."""
         self.should_expose = should_expose
         self.entity_config = entity_config or {}
+
+        expose_as = self.entity_config.get(CONF_EXPOSE_AS)
+        if expose_as and not expose_as.startswith(PREFIX_TYPES):
+            self.entity_config[CONF_EXPOSE_AS] = PREFIX_TYPES + expose_as
 
 
 class RequestData:
@@ -103,7 +110,7 @@ class YandexEntity:
         if not capabilities:
             return None
 
-        device_type = get_yandex_type(domain, device_class)
+        device_type = entity_config.get(CONF_EXPOSE_AS, get_yandex_type(domain, device_class))
 
         device = {
             'id': state.entity_id,

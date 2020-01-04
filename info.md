@@ -1,12 +1,16 @@
 # Yandex Smart Home integration
 
 ## Installation
-1. Install component from HACS
-1. Add custom dialog in Yandex Dialogs control panel
-1. Add devices via app or testing interface
+1. Configure SSL certificate if it was not done already (***do not*** use self-signed certificate)
+1. Update home assistant to 0.96.0 at least
+1. Install this component from HACS
+1. Configure component via configuration.yaml
+1. Restart Home Assistant
+1. Create dialog via https://dialogs.yandex.ru/developer/
+1. Add devices via your Yandex app on Android/iOS (or in _Testing_ mode).
 
 ## Example configuration
-```
+```yaml
 # Example configuration.yaml entry
 yandex_smart_home:
   filter:
@@ -19,12 +23,20 @@ yandex_smart_home:
     exclude_entities:
       - light.highlight
   entity_config:
+    switch.living_room_outlet:
+      expose_as: socket
     switch.kitchen:
       name: CUSTOM_NAME_FOR_YANDEX_SMART_HOME
     light.living_room:
       room: LIVING_ROOM
+      backlight: light.wall_ornament
     media_player.tv_lg:
       channel_set_via_media_content_id: true
+      sources:
+        one: "HDMI 1"
+        two: "HDMI 2"
+        three: "Composite"
+        four: "Netflix App"
 ```
 
 ## Configuration variables
@@ -51,14 +63,21 @@ yandex_smart_home:
         (string) (Optional) Name of entity to show in Yandex Smart Home.
       room:
         (string) (Optional) Associating this device to a room in Yandex Smart Home
+      expose_as:
+          (string) (Optional) Expose this entity as something else.
       channel_set_via_media_content_id:
-        (boolean) (Optional) (media_player only) Enables ability to set channel
-         by number for 
-        part of TVs (TVs that support channel change via passing number as media_content_id)
+        (boolean) (Optional) (media_player only) Enables ability to set channel by number for some TVs
+        (TVs that support channel change via passing number as media_content_id)
       relative_volume_only:
         (boolean) (Optional) (media_player only) Force disable ability to get/set volume by number
       sources:
         (dict, boolean) (Optional) (media_player only) Define selectable inputs (or map one-to-one in case of 'true').
         one / two / three / ... / ten:
-          (string) (Optional) Source name <=> Input source mapping.
+        (string) (Optional) Source name <=> Input source mapping.
+      backlight:
+        (string) (Optional) Entity ID to use as backlight control (must be toggleable).
+      channel_up:
+        (map) (Optional) Script to switch to next channel (avoids using next track).
+      channel_down:
+        (map) (Optional) Script to switch to previous channel (avoids using previous track).   
 ```
