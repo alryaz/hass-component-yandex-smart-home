@@ -1,14 +1,12 @@
 """Helper classes for Yandex Smart Home integration."""
 import logging
-
 from asyncio import gather
 from collections.abc import Mapping
 
-from homeassistant.core import Context, callback
 from homeassistant.const import (
-    CONF_NAME, STATE_UNAVAILABLE, ATTR_SUPPORTED_FEATURES,
-    ATTR_DEVICE_CLASS
+    CONF_NAME, STATE_UNAVAILABLE, ATTR_DEVICE_CLASS
 )
+from homeassistant.core import Context, callback
 
 from . import capability
 from .const import (
@@ -19,6 +17,7 @@ from .const import (
 from .error import SmartHomeError
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class Config:
     """Hold the configuration for Yandex Smart Home."""

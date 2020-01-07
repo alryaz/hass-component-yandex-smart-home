@@ -1,12 +1,13 @@
 # Yandex Smart Home integration
 
 ## Installation
-1. Configure SSL certificate if it was not done already (***do not*** use self-signed certificate)
 1. Update home assistant to 0.96.0 at least
-1. Install this component from HACS
-1. Configure component via configuration.yaml
-1. Restart Home Assistant
+1. Configure SSL certificate if it was not done already (***do not*** use self-signed certificate)
 1. Create dialog via https://dialogs.yandex.ru/developer/
+1. Install this component from HACS
+1. Restart Home Assistant
+1. Follow the example `configuration.yaml` entry below to add integration.
+   1. It is also possible to enable this integration via `Settings` => `Integrations` menu within _HomeAssistant_. Search for _Yandex Smart Home_ and follow the activation wizard. Be aware that there are limitations to this method (such as current lack of per-entity configuration).
 1. Add devices via your Yandex app on Android/iOS (or in _Testing_ mode).
 
 ## Example configuration

@@ -6,5 +6,6 @@
   "dependencies": [
     "http"
   ],
-  "codeowners": []
+  "codeowners": [],
+  "config_flow": true
 }

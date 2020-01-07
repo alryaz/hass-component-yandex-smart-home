@@ -1,0 +1,50 @@
+{
+  "config": {
+    "title": "Yandex Smart Home",
+    "step": {
+      "user": {
+        "title": "Configure entities for Yandex exposure",
+        "description": "Select entity domains which you would like to expose to Yandex Smart Home service. This acts as a wildcard for all entities. You will be able to add per-entity filters later during setup.",
+        "data": {
+          "domain_climate": "Thermostats",
+          "domain_cover": "Covers",
+          "domain_fan": "Fans",
+          "domain_group": "Groups",
+          "domain_input_boolean": "Boolean Inputs",
+          "domain_light": "Lights",
+          "domain_media_player": "Media Players",
+          "domain_switch": "Switches",
+          "domain_vacuum": "Vacuums"
+        }
+      },
+      "unsupported": {
+        "title": "Unsupported entity domains",
+        "description": "The following domains are not briefly supported by Yandex, and therefore will remain untested until official support is added. Enable them at your own risk!",
+        "data": {
+          "domain_binary_sensor": "Binary Sensors",
+          "domain_camera": "Cameras",
+          "domain_lock": "Locks",
+          "domain_scene": "Scenes",
+          "domain_script": "Scripts"
+        }
+      },
+      "selective": {
+        "title": "Selective entity exposure",
+        "description": "Exposes/hides certain entities, overriding previous domain configuration. You can leave these fields empty by default.",
+        "data": {
+          "include_entities": "Include entities",
+          "exclude_entities": "Exclude entities"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single configuration of Yandex Smart Home is allowed."
+    },
+    "error": {
+      "conflicting_entity_includes": "You have specified at least one entity ID for both includes and excludes!",
+      "empty_includes": "You haven't provided any domains or entities for exposing. Specify entities now, or restart the wizard to specify domains.",
+      "invalid_entity_id": "Provided entity ID [{entity_id}] is invalid!",
+      "empty_entity_id": "One of provided entity IDs is empty!"
+    }
+  }
+}
