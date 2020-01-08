@@ -30,10 +30,20 @@
       },
       "selective": {
         "title": "Selective entity exposure",
-        "description": "Exposes/hides certain entities, overriding previous domain configuration. You can leave these fields empty by default.",
+        "description": "Exposes/hides certain entities, overriding previous domain configuration. You can leave these fields empty by default.\n\nBy enabling included entities customization you will be able to enable additional features. You can read up on the list of current features on the [integration's GitHub page](https://github.com/alryaz/hass-component-yandex-smart-home/blob/master/README.md).",
         "data": {
-          "include_entities": "Include entities",
-          "exclude_entities": "Exclude entities"
+          "customize_exposure": "Customize included entities",
+          "include_entities": "Include entities (switch.one, light.two, ...)",
+          "exclude_entities": "Exclude entities (fan.three, cover.four, ...)"
+        }
+      },
+      "custom": {
+        "title": "Customize: {entity_id}",
+        "description": "Configure additional parameters for `{entity_id}`.",
+        "data": {
+          "expose_as": "Expose entity as other type",
+          "backlight": "Backlight entity ID (must be toggleable)",
+          "channel_set_via_media_content_id": "Set channel via `media_content_id` attribute"
         }
       }
     },

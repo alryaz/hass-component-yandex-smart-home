@@ -2,19 +2,21 @@
 import logging
 from asyncio import gather
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
-from homeassistant.const import (
-    CONF_NAME, STATE_UNAVAILABLE, ATTR_DEVICE_CLASS
-)
+from homeassistant.const import CONF_NAME, STATE_UNAVAILABLE
 from homeassistant.core import Context, callback
 
 from . import capability
 from .const import (
-    DEVICE_CLASS_TO_YANDEX_TYPES, DOMAIN_TO_YANDEX_TYPES,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE, ERR_DEVICE_UNREACHABLE,
     ERR_INVALID_VALUE, CONF_ROOM, PREFIX_TYPES, CONF_EXPOSE_AS,
 )
 from .error import SmartHomeError
+from .type_mapper import determine_state_type
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.device_registry import DeviceEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,10 +28,12 @@ class Config:
         """Initialize the configuration."""
         self.should_expose = should_expose
         self.entity_config = entity_config or {}
+        self.sensor_status = None
 
-        expose_as = self.entity_config.get(CONF_EXPOSE_AS)
-        if expose_as and not expose_as.startswith(PREFIX_TYPES):
-            self.entity_config[CONF_EXPOSE_AS] = PREFIX_TYPES + expose_as
+        for entity_id, entity_config in self.entity_config.items():
+            expose_as = entity_config.get(CONF_EXPOSE_AS)
+            if expose_as and not expose_as.startswith(PREFIX_TYPES):
+                self.entity_config[entity_id][CONF_EXPOSE_AS] = PREFIX_TYPES + expose_as
 
 
 class RequestData:
@@ -40,14 +44,6 @@ class RequestData:
         self.config = config
         self.request_id = request_id
         self.context = Context(user_id=user_id)
-
-
-def get_yandex_type(domain, device_class):
-    """Yandex type based on domain and device class."""
-    yandex_type = DEVICE_CLASS_TO_YANDEX_TYPES.get((domain, device_class))
-
-    return yandex_type if yandex_type is not None else \
-        DOMAIN_TO_YANDEX_TYPES[domain]
 
 
 class YandexEntity:
@@ -90,14 +86,12 @@ class YandexEntity:
 
         # When a state is unavailable, the attributes that describe
         # capabilities will be stripped. For example, a light entity will miss
-        # the min/max mireds. Therefore they will be excluded from a sync.
+        # the min/max boundaries. Therefore they will be excluded from a sync.
         if state.state == STATE_UNAVAILABLE:
             return None
 
         entity_config = self.config.entity_config.get(state.entity_id, {})
         name = (entity_config.get(CONF_NAME) or state.name).strip()
-        domain = state.domain
-        device_class = state.attributes.get(ATTR_DEVICE_CLASS)
 
         # If an empty string
         if not name:
@@ -109,7 +103,11 @@ class YandexEntity:
         if not capabilities:
             return None
 
-        device_type = entity_config.get(CONF_EXPOSE_AS, get_yandex_type(domain, device_class))
+        device_type = entity_config.get(CONF_EXPOSE_AS)
+        if device_type:
+            _LOGGER.debug('Entity [%s] is forcefully exposed as `%s`' % (state.entity_id, device_type))
+        else:
+            device_type = determine_state_type(self.hass, state, entity_config)
 
         device = {
             'id': state.entity_id,
@@ -126,25 +124,35 @@ class YandexEntity:
         room = entity_config.get(CONF_ROOM)
         if room:
             device['room'] = room
-            return device
 
-        dev_reg, ent_reg, area_reg = await gather(
+        dev_reg, ent_reg = await gather(
             self.hass.helpers.device_registry.async_get_registry(),
             self.hass.helpers.entity_registry.async_get_registry(),
-            self.hass.helpers.area_registry.async_get_registry(),
         )
 
         entity_entry = ent_reg.async_get(state.entity_id)
         if not (entity_entry and entity_entry.device_id):
             return device
 
-        device_entry = dev_reg.devices.get(entity_entry.device_id)
-        if not (device_entry and device_entry.area_id):
+        device_entry = dev_reg.devices.get(entity_entry.device_id)  # type: DeviceEntry
+        if not device_entry:
             return device
 
-        area_entry = area_reg.areas.get(device_entry.area_id)
-        if area_entry and area_entry.name:
-            device['room'] = area_entry.name
+        device_info = {
+            attr: getattr(device_entry, attr)
+            for attr in ['manufacturer', 'model', 'sw_version']
+            if getattr(device_entry, attr)
+        }
+        _LOGGER.debug('device_info for `%s`: %s' % (state.entity_id, device_info))
+        if device_info:
+            device['device_info'] = device_info
+
+        if device_entry.area_id and 'room' not in device:
+            area_reg = await self.hass.helpers.area_registry.async_get_registry()
+
+            area_entry = area_reg.areas.get(device_entry.area_id)
+            if area_entry and area_entry.name:
+                device['room'] = area_entry.name
 
         return device
 

@@ -1,5 +1,6 @@
 """Support for Yandex Smart Home."""
 import logging
+from json import loads
 
 from aiohttp.web import Request, Response
 # Typing imports
@@ -18,7 +19,8 @@ class YandexSmartHomeUnauthorizedView(HomeAssistantView):
     name = 'api:yandex_smart_home:unauthorized'
     requires_auth = False
 
-    def config(self, request):
+    @classmethod
+    def config(cls, request):
         return request.app['hass'].data.get(DOMAIN)
 
     async def head(self, request: Request) -> Response:
@@ -48,7 +50,8 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
         if self.config(request) is None:
             return Response(status=404)
 
-        message = await request.json()  # type: dict
+        request_body = await request.text()
+        message = loads(request_body) if request_body else {}
         _LOGGER.debug("Request: %s (POST data: %s)" % (request.url, message))
         result = await async_handle_message(
             request.app['hass'],

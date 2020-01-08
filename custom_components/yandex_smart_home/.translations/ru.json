@@ -33,7 +33,17 @@
         "description": "Раскрывает или скрывает конкретные сущности вопреки предыдущим настройкам домена. Введите идентификаторы сущностей через запятую.",
         "data": {
           "include_entities": "Включать сущности (switch.one, light.two, ...)",
-          "exclude_entities": "Исключать сущности (fan.three, cover.four, ...)"
+          "exclude_entities": "Исключать сущности (fan.three, cover.four, ...)",
+          "customize_exposure": "Customize included entities"
+        }
+      },
+      "custom": {
+        "title": "Custom entity configuration",
+        "description": "Configure additional parameters for `{entity_id}`.",
+        "data": {
+          "expose_as": "Expose entity as other type",
+          "entity_backlight": "Backlight entity ID (must be toggleable)",
+          "channel_set_via_media_content_id": "Set channel via `media_content_id` attribute"
         }
       }
     },

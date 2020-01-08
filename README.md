@@ -146,5 +146,64 @@ API authorization endpoint | https://[YOUR HOME ASSISTANT URL:PORT]/auth/authori
 Token Endpoint | https://[YOUR HOME ASSISTANT URL:PORT]/auth/token
 Refreshing an Access Token | https://[YOUR HOME ASSISTANT URL:PORT]/auth/token
 
-### Roadmap
-- Integrate custom notification at boot to configure API
+## Supported device types
+This list is a work-in-progress registry of device types supported by this integration.  
+Refer to this list as an overview of project's progress or a guide to overriding default entity exposure domains.
+
+### Capabilities
+- [x] On / Off: `on_off` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/on_off-docpage/))
+- [x] Color setting: `color_setting` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/color_setting-docpage/))
+  - [x] Temperature object: `temperature_k` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/color_setting-docpage/#discovery__discovery-parameters-color-setting-table__entry__17))
+  - [x] RGB palette: `color_model` -> `rgb` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/color_setting-docpage/#discovery__discovery-parameters-color-setting-table__entry__17))
+  - [ ] HSV palette: `color_model` -> `hsv` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/color_setting-docpage/#discovery__discovery-parameters-color-setting-table__entry__17))
+- [ ] Operation Mode: `mode` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-docpage/))
+  - [x] Retrievable flag ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-docpage/#discovery__discovery-parameters-mode-table))
+  - [ ] Cleanup mode function: `cleanup_mode` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__cleanup_mode))
+  - [ ] Coffee mode function: `coffee_mode` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__coffee_mode))
+  - [x] Fan speed function: `fan_speed` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__fan_speed))
+  - [x] Input source function: `input_source` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__input_source))
+  - [ ] Program function: `program` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__program))
+  - [x] Swing function: `swing` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__swing))
+  - [x] Thermostat function: `thermostat` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__thermostat))
+  - [ ] Work speed function: `work_speed` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/#mode-instance__work_speed))"
+- [ ] Range of values: `range` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-docpage/))
+  - [x] Brightness function: `brightness` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-instance-docpage/#range-instance__brightness))
+  - [x] Channel function: `channel` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-instance-docpage/#range-instance__channel))
+  - [x] Humidity function: `humidity` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-instance-docpage/#range-instance__humidity))
+  - [x] Temperature function: `temperature` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-instance-docpage/#range-instance__temperature))
+  - [x] Volume function: `volume` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-instance-docpage/#range-instance__volume))"
+- [ ] Toggle: `toggle` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-docpage/))
+  - [x] Backlight function: `backlight` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__backlight))
+  - [ ] Controls locked function: `controls_locked` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__controls_locked))
+  - [ ] Ionization function: `ionization` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__ionization))
+  - [ ] Keep warm function: `keep_warm` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__keep_warm))
+  - [x] Mute function: `mute` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__mute))
+  - [x] Oscillation function: `oscillation` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__oscillation))
+  - [x] Pause function: `pause` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/#toggle-instance__pause))"
+
+### Domain coverage
+- [x] Switch type: `devices.types.switch` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-switch-docpage/))
+  - [x] Expose `switch` domain
+  - [x] Expose `group` domain
+  - [x] Expose `input_boolean` domain
+- [x] Lights: `light` -> `devices.types.light` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-light-docpage/))
+- [x] Sockets: __(???)__ -> `devices.types.socket` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-socket-docpage/))
+  - [x] Full `switch` compatibility when using `entity_config.expose_as`
+- [x] Thermostat: `climate` -> `devices.types.thermostat` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-thermostat-docpage/))
+- [x] Air conditioner: `climate`, `fan` -> `devices.types.thermostat.ac` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-thermostat-ac-docpage/))
+- [x] Media devices: `media_player` -> `devices.types.media_device` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-media-docpage/))
+- [ ] Televisions: `media_player` -> `devices.types.media_device.tv` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-media-tv-docpage/))
+  - [ ] Propose mainline inclusion of `device_class` attribute for `media_player` domain
+  - [ ] Implement specific `device_class` checking in the _type mapper_.
+- [ ] Cooking appliances: __(???)__ -> `devices.types.cooking` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-cooking-docpage/))
+- [ ] Coffee makers: __(???)__ -> `devices.types.cooking.coffee_maker` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-cooking-coffee-maker-docpage/))
+- [ ] Kettles: __(???)__ -> `devices.types.cooking.kettle` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-cooking-kettle-docpage/))
+- [ ] Basic openables: __(???)__ -> `devices.types.openable` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-openable-docpage/))
+- [ ] Curtains: __(???)__ -> `devices.types.openable.curtain` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-openable-curtain-docpage/))
+- [ ] Humidifiers: `climate`, `fan` -> `devices.types.humidifier` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-humidifier-docpage/))
+  - [x] Expose `climate` domain
+  - [x] Expose capability with certain entries from `fan` domain
+  - [ ] Testing required
+- [ ] Purifiers: __(???)__ -> `devices.types.purifier` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-purifier-docpage/))
+- [ ] Vacuum Cleaners: `vacuum` -> `devices.types.vacuum_cleaner` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-vacuum-cleaner-docpage/))
+- [x] Other: everything else -> `devices.types.other` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-other-docpage/))"

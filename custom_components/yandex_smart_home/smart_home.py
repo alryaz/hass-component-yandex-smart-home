@@ -1,17 +1,17 @@
 """Support for Yandex Smart Home API."""
 import logging
+from datetime import datetime
 
+from homeassistant.const import CLOUD_NEVER_EXPOSED_ENTITIES
 from homeassistant.util.decorator import Registry
 
-from homeassistant.const import (
-    CLOUD_NEVER_EXPOSED_ENTITIES, ATTR_ENTITY_ID)
-
+from .const import DOMAIN
 from .const import (
     ERR_INTERNAL_ERROR, ERR_DEVICE_UNREACHABLE,
     ERR_DEVICE_NOT_FOUND
 )
-from .helpers import RequestData, YandexEntity
 from .error import SmartHomeError
+from .helpers import RequestData, YandexEntity
 
 HANDLERS = Registry()
 _LOGGER = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ async def async_handle_message(hass, config, user_id, request_id, action,
     response = await _process(hass, data, action, message)
 
     if response and 'payload' in response and 'error_code' in response[
-            'payload']:
+        'payload']:
         _LOGGER.error('Error handling message %s: %s',
                       message, response['payload'])
 
@@ -117,6 +117,10 @@ async def async_devices_query(hass, data, message):
         entity = YandexEntity(hass, data.config, state)
         devices.append(entity.query_serialize())
 
+    yandex_sensor = hass.data.get(DOMAIN).sensor_status
+    if yandex_sensor:
+        yandex_sensor.record_sync(datetime.now(), devices)
+
     return {'devices': devices}
 
 
@@ -199,6 +203,10 @@ async def handle_devices_execute(hass, data, message):
             'id': entity.entity_id,
             'capabilities': capabilities,
         })
+
+    yandex_sensor = hass.data.get(DOMAIN).sensor_status
+    if yandex_sensor:
+        yandex_sensor.record_action(datetime.now(), entities)
 
     return {'devices': final_results}
 

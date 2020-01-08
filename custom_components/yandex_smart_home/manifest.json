@@ -1,11 +1,9 @@
 {
   "domain": "yandex_smart_home",
   "name": "Yandex Smart Home",
-  "documentation": "https://github.com/dmitry-k/yandex_smart_home",
+  "documentation": "https://github.com/alryaz/yandex_smart_home",
   "requirements": [],
-  "dependencies": [
-    "http"
-  ],
-  "codeowners": [],
+  "dependencies": ["http"],
+  "codeowners": ["@dmitry-k", "@alryaz"],
   "config_flow": true
 }

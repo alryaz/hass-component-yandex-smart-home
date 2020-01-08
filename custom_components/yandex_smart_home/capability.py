@@ -1,5 +1,7 @@
 """Implement the Yandex Smart Home capabilities."""
 import logging
+from abc import ABC
+from typing import Any, Optional, TYPE_CHECKING
 
 from homeassistant.components import (
     climate,
@@ -14,10 +16,11 @@ from homeassistant.components import (
     switch,
     vacuum,
 )
+from homeassistant.components.wemo import fan as wemo_fan
+from homeassistant.components.xiaomi_miio import fan as miio_fan
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_SUPPORTED_FEATURES,
-    ATTR_DEVICE_CLASS,
     SERVICE_CLOSE_COVER,
     SERVICE_OPEN_COVER,
     SERVICE_TURN_OFF,
@@ -26,23 +29,26 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
 )
-from homeassistant.core import DOMAIN as HA_DOMAIN
-from homeassistant.util import color as color_util
+from homeassistant.core import DOMAIN as HA_DOMAIN, State
 from homeassistant.helpers.script import Script
+from homeassistant.helpers.typing import HomeAssistantType
+from homeassistant.util import color as color_util
 
 from .const import (
     ERR_INVALID_VALUE,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY,
-    CONF_INPUT_SOURCES, MODES_NUMERIC, CONF_CONTROLS_SWITCH,
-    CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN,
+    CONF_INPUT_SOURCES, MODES_NUMERIC, CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN,
     CONF_ENTITY_BACKLIGHT)
 from .error import SmartHomeError
+
+if TYPE_CHECKING:
+    from .helpers import RequestData
 
 _LOGGER = logging.getLogger(__name__)
 
 PREFIX_CAPABILITIES = 'devices.capabilities.'
-CAPABILITIES_ONOFF = PREFIX_CAPABILITIES + 'on_off'
+CAPABILITIES_ON_OFF = PREFIX_CAPABILITIES + 'on_off'
 CAPABILITIES_TOGGLE = PREFIX_CAPABILITIES + 'toggle'
 CAPABILITIES_RANGE = PREFIX_CAPABILITIES + 'range'
 CAPABILITIES_MODE = PREFIX_CAPABILITIES + 'mode'
@@ -57,20 +63,25 @@ def register_capability(capability):
     return capability
 
 
-class _Capability:
+class _Capability(ABC):
     """Represents a Capability."""
 
     type = ''
     instance = ''
     retrievable = True
 
-    def __init__(self, hass, state, entity_config):
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config):
         """Initialize a trait for a state."""
         self.hass = hass
         self.state = state
         self.entity_config = entity_config
 
-    def description(self):
+    @staticmethod
+    def supported(state: State, entity_config: dict) -> Any:
+        """Check whether current entity is supported."""
+        raise NotImplementedError
+
+    def description(self) -> dict:
         """Return description for a devices request."""
         response = {
             'type': self.type,
@@ -82,25 +93,25 @@ class _Capability:
 
         return response
 
-    def get_state(self):
+    def get_state(self) -> dict:
         """Return the state of this capability for this entity."""
         return {
             'type': self.type,
-            'state':  {
+            'state': {
                 'instance': self.instance,
                 'value': self.get_value()
             }
         }
 
-    def parameters(self):
+    def parameters(self) -> dict:
         """Return parameters for a devices request."""
         raise NotImplementedError
 
-    def get_value(self):
+    def get_value(self) -> Any:
         """Return the state value of this capability for this entity."""
         raise NotImplementedError
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: State) -> None:
         """Set device state."""
         raise NotImplementedError
 
@@ -112,35 +123,33 @@ class OnOffCapability(_Capability):
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/on_off-docpage/
     """
 
-    type = CAPABILITIES_ONOFF
+    type = CAPABILITIES_ON_OFF
     instance = 'on'
 
     def __init__(self, hass, state, config):
         super().__init__(hass, state, config)
-        self.retrievable = state.domain != scene.DOMAIN and state.domain != \
-            script.DOMAIN
+        self.retrievable = state.domain != scene.DOMAIN and state.domain != script.DOMAIN
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, entity_config: dict):
         """Test if state is supported."""
         if state.domain == vacuum.DOMAIN:
             features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
             return ((features & vacuum.SUPPORT_START
-                    and (features & vacuum.SUPPORT_RETURN_HOME
-                        or features & vacuum.SUPPORT_STOP)
-                    ) or (features & vacuum.SUPPORT_TURN_ON
-                        and features & vacuum.SUPPORT_TURN_OFF))
+                     and (features & vacuum.SUPPORT_RETURN_HOME or features & vacuum.SUPPORT_STOP))
+                    or (features & vacuum.SUPPORT_TURN_ON and features & vacuum.SUPPORT_TURN_OFF))
+
         elif state.domain in (
-            cover.DOMAIN,
-            group.DOMAIN,
-            input_boolean.DOMAIN,
-            switch.DOMAIN,
-            fan.DOMAIN,
-            light.DOMAIN,
-            media_player.DOMAIN,
-            climate.DOMAIN,
-            scene.DOMAIN,
-            script.DOMAIN,
+                cover.DOMAIN,
+                group.DOMAIN,
+                input_boolean.DOMAIN,
+                switch.DOMAIN,
+                fan.DOMAIN,
+                light.DOMAIN,
+                media_player.DOMAIN,
+                climate.DOMAIN,
+                scene.DOMAIN,
+                script.DOMAIN,
         ):
             return True
         return False
@@ -161,7 +170,7 @@ class OnOffCapability(_Capability):
         else:
             return self.state.state != STATE_OFF
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         domain = self.state.domain
 
@@ -200,7 +209,7 @@ class OnOffCapability(_Capability):
         }, blocking=self.state.domain != script.DOMAIN, context=data.context)
 
 
-class _ToggleCapability(_Capability):
+class _ToggleCapability(_Capability, ABC):
     """Base toggle functionality.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-docpage/
@@ -221,11 +230,11 @@ class MuteCapability(_ToggleCapability):
     instance = 'mute'
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
-        return state.domain == media_player.DOMAIN and \
-            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & \
-                media_player.SUPPORT_VOLUME_MUTE
+        return state.domain == media_player.DOMAIN and (
+                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_VOLUME_MUTE
+        )
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -233,7 +242,7 @@ class MuteCapability(_ToggleCapability):
 
         return bool(muted)
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         if not isinstance(state['value'], bool):
             raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
@@ -258,12 +267,9 @@ class BacklightCapability(_ToggleCapability):
     instance = "backlight"
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(_: State, entity_config: dict):
         """Test if state is supported."""
-        return entity_config.get(CONF_ENTITY_BACKLIGHT) and (
-            state.domain in (light.DOMAIN, switch.DOMAIN) or (
-                state.domain == media_player.DOMAIN and
-                state.attributes.get(ATTR_DEVICE_CLASS) == media_player.DEVICE_CLASS_TV))
+        return entity_config.get(CONF_ENTITY_BACKLIGHT)
 
     @property
     def entity_id(self):
@@ -280,11 +286,9 @@ class BacklightCapability(_ToggleCapability):
 
     def get_value(self):
         """Return the state of backlight for this entity."""
-
-
         return self._get_backlight_device_state() != STATE_OFF
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set backlight state."""
         if not isinstance(state['value'], bool):
             raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
@@ -292,17 +296,89 @@ class BacklightCapability(_ToggleCapability):
         # the following will throw a barrier exception
         self._get_backlight_device_state()
 
-        entity_id = self.entity_config.get(CONF_ENTITY_BACKLIGHT)
-
         service = SERVICE_TURN_ON if state['value'] else SERVICE_TURN_OFF
 
-        await self.hass.services.async_call(HA_DOMAIN, service, {
-            ATTR_ENTITY_ID: self.entity_id
-        }, blocking=False, context=data.context)
+        await self.hass.services.async_call(
+            HA_DOMAIN,
+            service, {
+                ATTR_ENTITY_ID: self.entity_id
+            }, blocking=False, context=data.context)
 
 
+@register_capability
+class OscillationCapability(_ToggleCapability):
+    """Oscillation capability"""
 
-class _ModeCapability(_Capability):
+    instance = "oscillation"
+
+    @staticmethod
+    def supported(state: State, _: dict):
+        return state.domain == fan.DOMAIN and (
+                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & fan.SUPPORT_OSCILLATE
+        )
+
+    def get_value(self):
+        """Return the state of oscillation for this entity."""
+        return bool(self.state.attributes.get(fan.ATTR_OSCILLATING))
+
+    async def set_state(self, data: 'RequestData', state: dict):
+        if not isinstance(state['value'], bool):
+            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
+
+        await self.hass.services.async_call(
+            fan.DOMAIN,
+            fan.SERVICE_OSCILLATE, {
+                ATTR_ENTITY_ID: self.state.entity_id,
+                fan.ATTR_OSCILLATING: state['value']
+            }, blocking=True, context=data.context)
+
+
+@register_capability
+class PauseCapability(_ToggleCapability):
+    """Play/pause functionality"""
+
+    instance = "pause"
+
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config: dict):
+        super().__init__(hass, state, entity_config)
+        self.retrievable = state.domain == media_player.DOMAIN or state.domain == vacuum.DOMAIN and (
+                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & vacuum.SUPPORT_STATE
+        )
+
+    @staticmethod
+    def supported(state: State, _: dict):
+        features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+        return state.domain == media_player.DOMAIN and (
+                features & media_player.SUPPORT_PLAY and features & media_player.SUPPORT_PAUSE
+        ) or state.domain == vacuum.DOMAIN and (
+                       features & vacuum.SUPPORT_PAUSE
+               )
+
+    def get_value(self):
+        return self.state.state != media_player.STATE_PLAYING
+
+    async def set_state(self, data: 'RequestData', state: dict):
+        if not isinstance(state['value'], bool):
+            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
+
+        if self.state.domain == media_player.DOMAIN:
+            service = media_player.SERVICE_MEDIA_PAUSE if state['value'] else media_player.SERVICE_MEDIA_PLAY
+            await self.hass.services.async_call(
+                media_player.DOMAIN,
+                service, {
+                    ATTR_ENTITY_ID: self.state.entity_id
+                }, blocking=True, context=data.context)
+
+        elif self.state.domain == vacuum.DOMAIN:
+            service = vacuum.SERVICE_PAUSE if state['value'] else vacuum.SERVICE_START
+            await self.hass.services.async_call(
+                vacuum.DOMAIN,
+                service, {
+                    ATTR_ENTITY_ID: self.state.entity_id
+                }, blocking=True, context=data.context)
+
+
+class _ModeCapability(_Capability, ABC):
     """Base class of capabilities with mode functionality like thermostat mode
     or fan speed.
 
@@ -317,20 +393,19 @@ class InputSourceCapability(_ModeCapability):
     """Input source functionality"""
 
     instance = 'input_source'
-    retrievable = True
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, entity_config: dict):
         """Test if state is supported."""
         return state.domain == media_player.DOMAIN and (
-            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_SELECT_SOURCE and \
+                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_SELECT_SOURCE and
                 entity_config.get(CONF_INPUT_SOURCES)
         )
 
     def parameters(self):
         """Return parameters for a devices request."""
         input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
-        if input_sources == True:
+        if isinstance(input_sources, bool):
             input_sources = [{"value": value} for value in MODES_NUMERIC]
         else:
             input_sources = [{"value": key} for key in sorted(input_sources.keys())]
@@ -345,7 +420,7 @@ class InputSourceCapability(_ModeCapability):
         input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
         current_input_source = self.state.attributes.get(media_player.ATTR_INPUT_SOURCE)
 
-        if input_sources == True:
+        if isinstance(input_sources, bool):
             if current_input_source in MODES_NUMERIC:
                 return current_input_source
 
@@ -356,9 +431,9 @@ class InputSourceCapability(_ModeCapability):
 
         return 'auto'
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
-        if input_sources == True:
+        if isinstance(input_sources, bool):
             input_source = state['value']
         else:
             input_source = input_sources.get(state['value'], 'auto')
@@ -387,7 +462,7 @@ class ThermostatCapability(_ModeCapability):
     }
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
         return state.domain == climate.DOMAIN
 
@@ -395,14 +470,13 @@ class ThermostatCapability(_ModeCapability):
         """Return parameters for a devices request."""
         operation_list = self.state.attributes.get(climate.ATTR_HVAC_MODES)
         modes = []
-        for operation in operation_list:
+        for operation in sorted(operation_list):
             if operation in self.climate_map:
                 modes.append({'value': self.climate_map[operation]})
 
         return {
             'instance': self.instance,
             'modes': modes,
-            'ordered': False
         }
 
     def get_value(self):
@@ -414,7 +488,7 @@ class ThermostatCapability(_ModeCapability):
 
         return 'auto'
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         value = None
         for climate_value, yandex_value in self.climate_map.items():
@@ -447,7 +521,7 @@ class FanSpeedCapability(_ModeCapability):
     }
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
         if state.domain == climate.DOMAIN:
             return state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & climate.SUPPORT_FAN_MODE
@@ -516,7 +590,7 @@ class FanSpeedCapability(_ModeCapability):
 
         return 'auto'
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         value = self.get_ha_by_yandex_value(state['value'])
 
@@ -540,7 +614,72 @@ class FanSpeedCapability(_ModeCapability):
             }, blocking=True, context=data.context)
 
 
-class _RangeCapability(_Capability):
+# @register_capability
+# class CleanupModeCapability(_ModeCapability):
+#
+#    instance = "cleanup_mode"
+#
+#    supported_modes = {
+#        "auto",
+#        "eco",
+#        "express",
+#        "normal",
+#        "quiet"
+#    }
+
+
+@register_capability
+class SwingCapability(_ModeCapability):
+    """Swing capability"""
+
+    instance = "swing"
+
+    modes_swing = {
+        climate.const.SWING_BOTH: "auto",
+        climate.const.SWING_HORIZONTAL: "horizontal",
+        climate.const.SWING_OFF: "stationary",
+        climate.const.SWING_VERTICAL: "vertical",
+    }
+
+    @staticmethod
+    def supported(state: State, _: dict):
+        return state.domain == climate.DOMAIN and \
+               state.attributes.get(ATTR_SUPPORTED_FEATURES) & climate.SUPPORT_SWING_MODE
+
+    def parameters(self):
+        """Return parameters for a devices request."""
+        swing_modes = self.state.attributes.get(climate.const.ATTR_SWING_MODES)
+        modes = []
+        for mode in sorted(swing_modes):
+            if mode in self.modes_swing:
+                modes.append({'value': self.modes_swing.get(mode)})
+
+        return {
+            'instance': self.instance,
+            'modes': modes,
+        }
+
+    def get_value(self):
+        return self.modes_swing.get(
+            self.state.attributes(climate.const.ATTR_SWING_MODE),
+            climate.const.SWING_OFF
+        )
+
+    async def set_state(self, data: 'RequestData', state: dict):
+        for hass_mode, yandex_mode in self.modes_swing.items():
+            if yandex_mode == state['value'] and hass_mode in self.state.attributes.get(climate.const.ATTR_SWING_MODES):
+                await self.hass.services.async_call(
+                    climate.DOMAIN,
+                    climate.SERVICE_SET_SWING_MODE, {
+                        ATTR_ENTITY_ID: self.state.entity_id,
+                        climate.const.ATTR_SWING_MODE: hass_mode
+                    }, blocking=True, context=data.context)
+                return
+
+        raise SmartHomeError(ERR_INVALID_VALUE, "Unsupported swing mode")
+
+
+class _RangeCapability(_Capability, ABC):
     """Base class of capabilities with range functionality like volume or
     brightness.
 
@@ -550,6 +689,106 @@ class _RangeCapability(_Capability):
     type = CAPABILITIES_RANGE
 
 
+ATTR_TARGET_HUMIDITY = "target_humidity"
+ATTR_CURRENT_HUMIDITY = "current_humidity"
+ATTR_HUMIDITY_STEP = "humidity_step"
+SERVICE_PARAMS = "service_config"
+
+
+@register_capability
+class HumidityCapability(_RangeCapability):
+    """Set humidity functionality."""
+
+    instance = 'humidity'
+
+    supported_humidifiers = {
+        # this domain is officially supported
+        climate.DOMAIN: {
+            climate.ATTR_HUMIDITY: climate.ATTR_HUMIDITY,
+            climate.ATTR_CURRENT_HUMIDITY: climate.ATTR_CURRENT_HUMIDITY,
+            climate.SERVICE_SET_HUMIDITY: (climate.DOMAIN, climate.SERVICE_SET_HUMIDITY),
+            climate.ATTR_MIN_HUMIDITY: climate.ATTR_MIN_HUMIDITY,
+            climate.ATTR_MAX_HUMIDITY: climate.ATTR_MAX_HUMIDITY,
+            ATTR_HUMIDITY_STEP: 1,
+            SERVICE_PARAMS: lambda humidity: {climate.ATTR_HUMIDITY: humidity}
+        },
+        # the following domains are custom-supported
+        fan.DOMAIN: {
+            wemo_fan.DOMAIN: {
+                climate.ATTR_HUMIDITY: wemo_fan.ATTR_TARGET_HUMIDITY,
+                climate.ATTR_CURRENT_HUMIDITY: wemo_fan.ATTR_CURRENT_HUMIDITY,
+                climate.SERVICE_SET_HUMIDITY: (fan.DOMAIN, wemo_fan.SERVICE_SET_HUMIDITY),
+                climate.ATTR_MIN_HUMIDITY: 0,
+                climate.ATTR_MAX_HUMIDITY: 100,
+                ATTR_HUMIDITY_STEP: 1,
+                SERVICE_PARAMS: lambda humidity: {wemo_fan.ATTR_TARGET_HUMIDITY: humidity}
+            },
+            miio_fan.DOMAIN: {
+                climate.ATTR_HUMIDITY: miio_fan.ATTR_TARGET_HUMIDITY,
+                climate.ATTR_CURRENT_HUMIDITY: miio_fan.ATTR_HUMIDITY,
+                climate.SERVICE_SET_HUMIDITY: (fan.DOMAIN, miio_fan.SERVICE_SET_TARGET_HUMIDITY),
+                climate.ATTR_MIN_HUMIDITY: 30,
+                climate.ATTR_MAX_HUMIDITY: 80,
+                ATTR_HUMIDITY_STEP: 10,
+                SERVICE_PARAMS: lambda humidity: {miio_fan.ATTR_HUMIDITY: humidity}
+            },
+        },
+    }
+
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config):
+        super().__init__(hass, state, entity_config)
+        self._service_domain, self._attrs = self._get_access_parameters(self.state)
+
+    def _get_attribute_or_hard_setting(self, attr):
+        return self.state.attributes.get(self._attrs[attr]) \
+            if isinstance(self._attrs[attr], str) \
+            else self._attrs[attr]
+
+    @classmethod
+    def _get_access_parameters(cls, state: State) -> Optional[dict]:
+        if state.domain == climate.DOMAIN:
+            return cls.supported_humidifiers[climate.DOMAIN]
+
+        if state.domain in cls.supported_humidifiers:
+            for support_platform, attr_config in cls.supported_humidifiers.get(state.domain):
+                if (
+                        attr_config[ATTR_CURRENT_HUMIDITY] in state.attributes and
+                        attr_config[ATTR_TARGET_HUMIDITY] in state.attributes
+                ):
+                    return attr_config
+        return None
+
+    def parameters(self) -> dict:
+        return {
+            "instance": self.instance,
+            "random_access": True,
+            "range": {
+                "max": self._get_attribute_or_hard_setting(climate.ATTR_MAX_HUMIDITY),
+                "min": self._get_attribute_or_hard_setting(climate.ATTR_MIN_HUMIDITY),
+                "precision": self._get_attribute_or_hard_setting(ATTR_HUMIDITY_STEP),
+            },
+            "unit": "unit.percent"
+        }
+
+    @classmethod
+    def supported(cls, state: State, _: dict) -> bool:
+        if state.domain == climate.DOMAIN:
+            return state.attributes.get(ATTR_SUPPORTED_FEATURES) & climate.SUPPORT_TARGET_HUMIDITY
+
+        # @TODO: this is by far one of the worst methods to check, but otherwise a rewrite is needed
+        return bool(cls._get_access_parameters(state))
+
+    def get_value(self) -> Any:
+        return self.state.attributes.get(self._attrs[climate.ATTR_CURRENT_HUMIDITY])
+
+    async def set_state(self, data: 'RequestData', state: dict) -> None:
+        domain, service = self._attrs[climate.SERVICE_SET_HUMIDITY]
+        service_params = {ATTR_ENTITY_ID: self.state.entity_id}
+        service_params.update(self._attrs[SERVICE_PARAMS](state['value']))
+
+        self.hass.services.async_call(domain, service, service_params, blocking=True, context=data.context)
+
+
 @register_capability
 class TemperatureCapability(_RangeCapability):
     """Set temperature functionality."""
@@ -557,10 +796,11 @@ class TemperatureCapability(_RangeCapability):
     instance = 'temperature'
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
-        return state.domain == climate.DOMAIN and state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & \
-            climate.const.SUPPORT_TARGET_TEMPERATURE
+        return state.domain == climate.DOMAIN and (
+            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & climate.const.SUPPORT_TARGET_TEMPERATURE
+        )
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -584,7 +824,7 @@ class TemperatureCapability(_RangeCapability):
         else:
             return float(temperature)
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         await self.hass.services.async_call(
             climate.DOMAIN,
@@ -601,10 +841,11 @@ class BrightnessCapability(_RangeCapability):
     instance = 'brightness'
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
-        return state.domain == light.DOMAIN and \
-            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & light.SUPPORT_BRIGHTNESS
+        return state.domain == light.DOMAIN and (
+                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & light.SUPPORT_BRIGHTNESS
+        )
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -626,7 +867,7 @@ class BrightnessCapability(_RangeCapability):
         else:
             return int(100 * (brightness / 255))
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         await self.hass.services.async_call(
             light.DOMAIN,
@@ -649,10 +890,11 @@ class VolumeCapability(_RangeCapability):
         self.retrievable = features & media_player.SUPPORT_VOLUME_SET != 0
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
-        return state.domain == media_player.DOMAIN and \
-            state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_VOLUME_STEP
+        return state.domain == media_player.DOMAIN and (
+                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & media_player.SUPPORT_VOLUME_STEP
+        )
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -686,7 +928,7 @@ class VolumeCapability(_RangeCapability):
         else:
             return int(level * 100)
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         if self.is_relative_volume_only():
             if state['value'] > 0:
@@ -720,8 +962,10 @@ class ChannelCapability(_RangeCapability):
     def __init__(self, hass, state, config):
         super().__init__(hass, state, config)
         features = self.state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
-        self.retrievable = features & media_player.SUPPORT_PLAY_MEDIA != 0 and \
+        self.retrievable = (
+            features & media_player.SUPPORT_PLAY_MEDIA != 0 and
             self.entity_config.get(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID)
+        )
 
         channel_up = config.get(CONF_SCRIPT_CHANNEL_UP)
         if channel_up:
@@ -732,7 +976,7 @@ class ChannelCapability(_RangeCapability):
             self.script_channel_down = Script(hass, channel_down)
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, entity_config: dict):
         """Test if state is supported."""
         if state.domain == media_player.DOMAIN:
             features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
@@ -740,9 +984,9 @@ class ChannelCapability(_RangeCapability):
             return (features & media_player.SUPPORT_PLAY_MEDIA and
                     entity_config.get(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID) and
                     (features & media_player.SUPPORT_PREVIOUS_TRACK or
-                        entity_config.get(CONF_SCRIPT_CHANNEL_DOWN)) and
+                     entity_config.get(CONF_SCRIPT_CHANNEL_DOWN)) and
                     (features & media_player.SUPPORT_NEXT_TRACK) or
-                        entity_config.get(CONF_SCRIPT_CHANNEL_UP))
+                    entity_config.get(CONF_SCRIPT_CHANNEL_UP))
 
         return False
 
@@ -778,7 +1022,7 @@ class ChannelCapability(_RangeCapability):
         except TypeError:
             return 0
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         if 'relative' in state and state['relative']:
             if state['value'] > 0:
@@ -811,7 +1055,7 @@ class ChannelCapability(_RangeCapability):
                 }, blocking=True, context=data.context)
 
 
-class _ColorSettingCapability(_Capability):
+class _ColorSettingCapability(_Capability, ABC):
     """Base color setting functionality.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/color_setting-docpage/
@@ -846,10 +1090,11 @@ class RgbCapability(_ColorSettingCapability):
     instance = 'rgb'
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
-        return state.domain == light.DOMAIN and \
+        return state.domain == light.DOMAIN and (
             state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & light.SUPPORT_COLOR
+        )
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -863,7 +1108,7 @@ class RgbCapability(_ColorSettingCapability):
 
         return rgb
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         red = (state['value'] >> 16) & 0xFF
         green = (state['value'] >> 8) & 0xFF
@@ -884,10 +1129,9 @@ class TemperatureKCapability(_ColorSettingCapability):
     instance = 'temperature_k'
 
     @staticmethod
-    def supported(state, entity_config):
+    def supported(state: State, _: dict):
         """Test if state is supported."""
-        return state.domain == light.DOMAIN and \
-            state.attributes.get(ATTR_SUPPORTED_FEATURES) & light.SUPPORT_COLOR_TEMP
+        return state.domain == light.DOMAIN and state.attributes.get(ATTR_SUPPORTED_FEATURES) & light.SUPPORT_COLOR_TEMP
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -897,7 +1141,7 @@ class TemperatureKCapability(_ColorSettingCapability):
 
         return color_util.color_temperature_mired_to_kelvin(kelvin)
 
-    async def set_state(self, data, state):
+    async def set_state(self, data: 'RequestData', state: dict):
         """Set device state."""
         await self.hass.services.async_call(
             light.DOMAIN,

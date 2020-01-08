@@ -1,21 +1,7 @@
 """Constants for Yandex Smart Home."""
-from homeassistant.components import (
-    binary_sensor,
-    camera,
-    climate,
-    cover,
-    fan,
-    group,
-    input_boolean,
-    light,
-    lock,
-    media_player,
-    scene,
-    script,
-    switch,
-    vacuum,
-)
 DOMAIN = 'yandex_smart_home'
+
+DATA_YANDEX_SMART_HOME_CONFIG = DOMAIN + "_config"
 
 CONF_ENTITY_CONFIG = 'entity_config'
 CONF_FILTER = 'filter'
@@ -29,7 +15,13 @@ CONF_SCRIPT_CHANNEL_UP = 'channel_up'
 CONF_SCRIPT_CHANNEL_DOWN = 'channel_down'
 CONF_EXPOSE_AS = 'expose_as'
 
+ATTR_LAST_ACTION_TIME = "last_command_time"
+ATTR_LAST_ACTION_TARGETS = "last_command_targets"
+ATTR_LAST_SYNC_TIME = "last_sync_time"
+ATTR_SYNCED_DEVICES_COUNT = "synced_devices_count"
 
+# Yandex device types
+# https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types-docpage/
 PREFIX_TYPES = 'devices.types.'
 TYPE_LIGHT = PREFIX_TYPES + 'light'
 TYPE_SOCKET = PREFIX_TYPES + 'socket'
@@ -43,6 +35,9 @@ TYPE_OPENABLE_CURTAIN = PREFIX_TYPES + 'openable.curtain'
 TYPE_HUMIDIFIER = PREFIX_TYPES + 'humidifier'
 TYPE_PURIFIER = PREFIX_TYPES + 'purifier'
 TYPE_VACUUM_CLEANER = PREFIX_TYPES + 'vacuum_cleaner'
+TYPE_COOKING = PREFIX_TYPES + 'cooking'
+TYPE_COOKING_COFFEE_MAKER = PREFIX_TYPES + 'cooking.coffee_maker'
+TYPE_COOKING_KETTLE = PREFIX_TYPES + 'cooking.kettle'
 TYPE_OTHER = PREFIX_TYPES + 'other'
 
 # Error codes
@@ -58,27 +53,6 @@ ERR_NOT_SUPPORTED_IN_CURRENT_MODE = 'NOT_SUPPORTED_IN_CURRENT_MODE'
 EVENT_ACTION_RECEIVED = 'yandex_smart_home_action'
 EVENT_QUERY_RECEIVED = 'yandex_smart_home_query'
 EVENT_DEVICES_RECEIVED = 'yandex_smart_home_devices'
-
-DOMAIN_TO_YANDEX_TYPES = {
-    binary_sensor.DOMAIN: TYPE_OTHER,
-    camera.DOMAIN: TYPE_OTHER,
-    climate.DOMAIN: TYPE_THERMOSTAT,
-    cover.DOMAIN: TYPE_OPENABLE_CURTAIN,
-    fan.DOMAIN: TYPE_HUMIDIFIER,
-    group.DOMAIN: TYPE_SWITCH,
-    input_boolean.DOMAIN: TYPE_SWITCH,
-    light.DOMAIN: TYPE_LIGHT,
-    lock.DOMAIN: TYPE_OTHER,
-    media_player.DOMAIN: TYPE_MEDIA_DEVICE,
-    scene.DOMAIN: TYPE_OTHER,
-    script.DOMAIN: TYPE_OTHER,
-    switch.DOMAIN: TYPE_SWITCH,
-    vacuum.DOMAIN: TYPE_VACUUM_CLEANER,
-}
-
-DEVICE_CLASS_TO_YANDEX_TYPES = {
-    (media_player.DOMAIN, media_player.DEVICE_CLASS_TV): TYPE_MEDIA_DEVICE_TV,
-}
 
 MODES_NUMERIC = {
     'one', 'two', 'three', 'four', 'five',
