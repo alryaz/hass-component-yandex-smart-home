@@ -20,9 +20,6 @@ from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_SUPPORTED_FEATURES
 from homeassistant.core import State
 from homeassistant.helpers.typing import HomeAssistantType
 
-ATTR_MODEL = "model"
-ATTR_TARGET_HUMIDITY = "target_humidity"
-
 from .const import (
     TYPE_OTHER,
     TYPE_THERMOSTAT,
@@ -33,7 +30,9 @@ from .const import (
     TYPE_MEDIA_DEVICE,
     TYPE_VACUUM_CLEANER,
     TYPE_MEDIA_DEVICE_TV,
-    TYPE_HUMIDIFIER
+    TYPE_HUMIDIFIER,
+    ATTR_MODEL,
+    ATTR_TARGET_HUMIDITY
 )
 
 MAPPING_DEFAULT = "default"

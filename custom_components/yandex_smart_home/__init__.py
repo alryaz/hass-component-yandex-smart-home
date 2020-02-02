@@ -1,12 +1,10 @@
 """Support for Actions on Yandex Smart Home."""
 import logging
-from copy import deepcopy
 from typing import Optional
 
 import voluptuous as vol
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.config_entries import SOURCE_IMPORT
+from homeassistant.config_entries import ConfigEntry, SOURCE_IMPORT
 from homeassistant.const import CONF_NAME
 from homeassistant.helpers import entityfilter as ef, config_validation as cv
 from homeassistant.helpers.typing import HomeAssistantType
@@ -65,24 +63,35 @@ async def async_setup(hass: HomeAssistantType, config: Optional[dict]):
     if DOMAIN not in config:
         return True
 
-    conf = config[DOMAIN]
+    hass.data[DATA_YANDEX_SMART_HOME_CONFIG] = config[DOMAIN]
 
-    if not hass.config_entries.async_entries(DOMAIN):
-        hass.async_create_task(
-            hass.config_entries.flow.async_init(
-                DOMAIN, context={"source": SOURCE_IMPORT}, data=deepcopy(conf)
-            )
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_IMPORT},
+            data={}
         )
+    )
 
     return True
 
 
 async def async_setup_entry(hass: HomeAssistantType, config_entry: Optional[ConfigEntry]):
-    config = config_entry.data
     if DATA_YANDEX_SMART_HOME_CONFIG in hass.data:
-        config = {**config, **hass.data[DATA_YANDEX_SMART_HOME_CONFIG]}
-
-    hass.data[DATA_YANDEX_SMART_HOME_CONFIG] = config_entry
+        if config_entry.source != SOURCE_IMPORT:
+            _LOGGER.warning('Integration set up in HomeAssistant attempts to override existing YAML configuration.')
+            return False
+        config = hass.data[DATA_YANDEX_SMART_HOME_CONFIG]
+    elif config_entry.source == SOURCE_IMPORT:
+        _LOGGER.debug('Removing config entry from HASS as it was from YAML and now missing')
+        hass.async_create_task(
+            hass.config_entries.async_remove(
+                config_entry.entry_id
+            )
+        )
+        return False
+    else:
+        config = config_entry.data
 
     filter_config = config.get(CONF_FILTER, {})
     should_expose = ef.generate_filter(
@@ -96,7 +105,10 @@ async def async_setup_entry(hass: HomeAssistantType, config_entry: Optional[Conf
     entity_config = config_entry.data.get(CONF_ENTITY_CONFIG, {})
     _LOGGER.debug('async_setup_entry entity_config=%s', entity_config)
 
-    hass.data[DOMAIN] = Config(should_expose=should_expose, entity_config=entity_config)
+    hass.data[DOMAIN] = Config(
+        should_expose=should_expose,
+        entity_config=entity_config
+    )
 
     hass.async_add_job(
         hass.config_entries.async_forward_entry_setup(config_entry, SENSOR_DOMAIN)

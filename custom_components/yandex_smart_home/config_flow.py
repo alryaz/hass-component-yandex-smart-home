@@ -229,7 +229,6 @@ class YandexSmartHomeFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_import(self, import_config):
-        _LOGGER.debug('async_step_import %s' % import_config)
         """Import a config entry from configuration.yaml."""
         if self._async_current_entries():
             _LOGGER.warning("Only one configuration of Yandex Smart Home is allowed.")
@@ -237,6 +236,6 @@ class YandexSmartHomeFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_create_entry(
             title=YAML_CONFIG_FILE,
-            data=import_config,
+            data={},
             description='Configuration imported from YAML'
         )
