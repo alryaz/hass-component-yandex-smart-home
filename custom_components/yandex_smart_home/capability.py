@@ -16,7 +16,7 @@ from homeassistant.components import (
     switch,
     vacuum,
 )
-from homeassistant.components.wemo import fan as wemo_fan
+#from homeassistant.components.wemo import fan as wemo_fan
 from homeassistant.components.xiaomi_miio import fan as miio_fan
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -714,15 +714,15 @@ class HumidityCapability(_RangeCapability):
         },
         # the following domains are custom-supported
         fan.DOMAIN: {
-            wemo_fan.DOMAIN: {
-                climate.ATTR_HUMIDITY: wemo_fan.ATTR_TARGET_HUMIDITY,
-                climate.ATTR_CURRENT_HUMIDITY: wemo_fan.ATTR_CURRENT_HUMIDITY,
-                climate.SERVICE_SET_HUMIDITY: (fan.DOMAIN, wemo_fan.SERVICE_SET_HUMIDITY),
-                climate.ATTR_MIN_HUMIDITY: 0,
-                climate.ATTR_MAX_HUMIDITY: 100,
-                ATTR_HUMIDITY_STEP: 1,
-                SERVICE_PARAMS: lambda humidity: {wemo_fan.ATTR_TARGET_HUMIDITY: humidity}
-            },
+#            wemo_fan.DOMAIN: {
+#                climate.ATTR_HUMIDITY: wemo_fan.ATTR_TARGET_HUMIDITY,
+#                climate.ATTR_CURRENT_HUMIDITY: wemo_fan.ATTR_CURRENT_HUMIDITY,
+#                climate.SERVICE_SET_HUMIDITY: (fan.DOMAIN, wemo_fan.SERVICE_SET_HUMIDITY),
+#                climate.ATTR_MIN_HUMIDITY: 0,
+#                climate.ATTR_MAX_HUMIDITY: 100,
+#                ATTR_HUMIDITY_STEP: 1,
+#                SERVICE_PARAMS: lambda humidity: {wemo_fan.ATTR_TARGET_HUMIDITY: humidity}
+#            },
             miio_fan.DOMAIN: {
                 climate.ATTR_HUMIDITY: miio_fan.ATTR_TARGET_HUMIDITY,
                 climate.ATTR_CURRENT_HUMIDITY: miio_fan.ATTR_HUMIDITY,
