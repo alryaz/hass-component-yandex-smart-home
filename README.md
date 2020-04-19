@@ -1,5 +1,6 @@
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)  
+[![Donate](https://img.shields.io/badge/-Donate-purple.svg)](https://money.yandex.ru/to/410012369233217) _(current developer)_  
 [![Donate](https://img.shields.io/badge/-Donate-purple.svg)](https://money.yandex.ru/to/41001142896898) _(original developer)_  
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 
 ## Yandex Smart Home custom component for Home Assistant
 
@@ -195,15 +196,18 @@ Refer to this list as an overview of project's progress or a guide to overriding
 - [ ] Televisions: `media_player` -> `devices.types.media_device.tv` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-media-tv-docpage/))
   - [ ] Propose mainline inclusion of `device_class` attribute for `media_player` domain
   - [ ] Implement specific `device_class` checking in the _type mapper_.
+- [ ] Set-top boxes: `media_player` -> `devices.types.media_device.tv_box` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-media-tv-box-docpage/))
+- [ ] Receivers: `media_player` -> `devices.types.media_device.receiver` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-media-receiver-docpage/))
 - [ ] Cooking appliances: __(???)__ -> `devices.types.cooking` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-cooking-docpage/))
 - [ ] Coffee makers: __(???)__ -> `devices.types.cooking.coffee_maker` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-cooking-coffee-maker-docpage/))
 - [ ] Kettles: __(???)__ -> `devices.types.cooking.kettle` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-cooking-kettle-docpage/))
-- [ ] Basic openables: __(???)__ -> `devices.types.openable` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-openable-docpage/))
+- [ ] Generic openables: __(???)__ -> `devices.types.openable` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-openable-docpage/))
 - [ ] Curtains: __(???)__ -> `devices.types.openable.curtain` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-openable-curtain-docpage/))
 - [ ] Humidifiers: `climate`, `fan` -> `devices.types.humidifier` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-humidifier-docpage/))
   - [x] Expose `climate` domain
   - [x] Expose capability with certain entries from `fan` domain
   - [ ] Testing required
 - [ ] Purifiers: __(???)__ -> `devices.types.purifier` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-purifier-docpage/))
-- [ ] Vacuum Cleaners: `vacuum` -> `devices.types.vacuum_cleaner` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-vacuum-cleaner-docpage/))
+- [ ] Vacuum cleaners: `vacuum` -> `devices.types.vacuum_cleaner` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-vacuum-cleaner-docpage/))
+- [ ] Washing machines: __(???)__ -> `devices.types.washing_machine` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-washing-machine-docpage/))
 - [x] Other: everything else -> `devices.types.other` ([docs](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-type-other-docpage/))"
