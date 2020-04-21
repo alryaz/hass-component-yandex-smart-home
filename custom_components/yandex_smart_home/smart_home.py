@@ -4,9 +4,8 @@ from datetime import datetime
 
 from homeassistant.const import CLOUD_NEVER_EXPOSED_ENTITIES
 from homeassistant.util.decorator import Registry
-
-from .const import DOMAIN
 from .const import (
+	DOMAIN,
     ERR_INTERNAL_ERROR, ERR_DEVICE_UNREACHABLE,
     ERR_DEVICE_NOT_FOUND
 )

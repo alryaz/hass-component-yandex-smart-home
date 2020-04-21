@@ -10,7 +10,7 @@
    1. It is also possible to enable this integration via `Settings` => `Integrations` menu within _HomeAssistant_. Search for _Yandex Smart Home_ and follow the activation wizard. Be aware that there are limitations to this method (such as current lack of per-entity configuration).
 1. Add devices via your Yandex app on Android/iOS (or in _Testing_ mode).
 
-## Example configuration
+### Example configuration
 ```yaml
 # Example configuration.yaml entry
 yandex_smart_home:
@@ -24,13 +24,12 @@ yandex_smart_home:
     exclude_entities:
       - light.highlight
   entity_config:
-    switch.living_room_outlet:
-      expose_as: socket
     switch.kitchen:
       name: CUSTOM_NAME_FOR_YANDEX_SMART_HOME
     light.living_room:
       room: LIVING_ROOM
-      backlight: light.wall_ornament
+      toggles:
+        backlight: light.wall_ornament
     media_player.tv_lg:
       channel_set_via_media_content_id: true
       sources:
@@ -38,9 +37,27 @@ yandex_smart_home:
         two: "HDMI 2"
         three: "Composite"
         four: "Netflix App"
+      toggles:
+        controls_locked: switch.custom_webostv_controls_lock
+        backlight: switch.raspberry_pi_ambilight
+      properties:
+        power:
+          entity: sensor.global_power_monitor
+          attribute: television_socket
+    fan.xiaomi_miio_device:
+      name: "Xiaomi Humidifier"
+      room: LIVING_ROOM
+      type: devices.types.humidifier
+      properties:
+        temperature: sensor.temperature_123d45678910
+        humidity:
+          attribute: humidity
+        water_level:
+          attribute: depth
 ```
 
-## Configuration variables
+
+### Variable description
 ```
 yandex_smart_home:
   (map) (Optional) Configuration options for the Yandex Smart Home integration.
@@ -64,8 +81,8 @@ yandex_smart_home:
         (string) (Optional) Name of entity to show in Yandex Smart Home.
       room:
         (string) (Optional) Associating this device to a room in Yandex Smart Home
-      expose_as:
-          (string) (Optional) Expose this entity as something else.
+      type:
+        (string) (Optional) Allows to force set device type. For exmaple set devices.types.purifier to display device as purifier (instead default devices.types.humidifier for such devices) 
       channel_set_via_media_content_id:
         (boolean) (Optional) (media_player only) Enables ability to set channel by number for some TVs
         (TVs that support channel change via passing number as media_content_id)
@@ -74,11 +91,23 @@ yandex_smart_home:
       sources:
         (dict, boolean) (Optional) (media_player only) Define selectable inputs (or map one-to-one in case of 'true').
         one / two / three / ... / ten:
-        (string) (Optional) Source name <=> Input source mapping.
+          (string) (Optional) Source name <=> Input source mapping.
       backlight:
         (string) (Optional) Entity ID to use as backlight control (must be toggleable).
       channel_up:
         (map) (Optional) Script to switch to next channel (avoids using next track).
       channel_down:
-        (map) (Optional) Script to switch to previous channel (avoids using previous track).   
+        (map) (Optional) Script to switch to previous channel (avoids using previous track).
+      toggles:
+        (dict) (Optional) Assign togglable entities for certain features or override auto-detected ones.
+        backlight / controls_locked ...:
+          (entity ID) Entity ID to be used with the toggle
+      properties:
+        (dict) (Optional) Assign entities or attributes for certain properties or override auto-detected ones.
+        humidity / temperature / water_level / co2_level / power / voltage:
+          (dict / entity ID) Configuration data for property (only entity ID can be specified instead of dictionary, if using other entities).
+          entity:
+            (string) (Optional) Custom entity, any sensor can be added 
+          attribute:
+            (string) (Optional) Attribute of an object to receive data
 ```

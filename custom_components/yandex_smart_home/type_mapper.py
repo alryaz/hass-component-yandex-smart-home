@@ -1,6 +1,8 @@
 """Type mapper to infer yandex entity types from HomeAssistant's domains"""
 
 from homeassistant.components import (
+    automation,
+    androidtv as adb,
     binary_sensor,
     camera,
     climate,
@@ -24,26 +26,39 @@ from .const import (
     TYPE_OTHER,
     TYPE_THERMOSTAT,
     TYPE_THERMOSTAT_AC,
+    TYPE_OPENABLE,
     TYPE_OPENABLE_CURTAIN,
     TYPE_SWITCH,
+    TYPE_SOCKET,
     TYPE_LIGHT,
     TYPE_MEDIA_DEVICE,
+    TYPE_MEDIA_DEVICE_TV_BOX,
     TYPE_VACUUM_CLEANER,
     TYPE_MEDIA_DEVICE_TV,
     TYPE_HUMIDIFIER,
     ATTR_MODEL,
-    ATTR_TARGET_HUMIDITY
+    ATTR_TARGET_HUMIDITY,
 )
 
 MAPPING_DEFAULT = "default"
 DOMAIN_TO_YANDEX_TYPES = {
+    automation.DOMAIN: TYPE_OTHER,
     binary_sensor.DOMAIN: TYPE_OTHER,
     camera.DOMAIN: TYPE_OTHER,
     climate.DOMAIN: {
         MAPPING_DEFAULT: TYPE_THERMOSTAT,
         TYPE_THERMOSTAT_AC: lambda h, s, c: s.attributes.get(ATTR_SUPPORTED_FEATURES) & climate.SUPPORT_SWING_MODE
     },
-    cover.DOMAIN: TYPE_OPENABLE_CURTAIN,
+    cover.DOMAIN: {
+        MAPPING_DEFAULT: TYPE_OPENABLE,
+        TYPE_OPENABLE_CURTAIN: lambda h, s, c: s.attributes.get(ATTR_DEVICE_CLASS) in (
+            cover.DEVICE_CLASS_SHADE,
+            cover.DEVICE_CLASS_SHUTTER,
+            cover.DEVICE_CLASS_CURTAIN,
+            cover.DEVICE_CLASS_BLIND,
+            cover.DEVICE_CLASS_AWNING,
+        )
+    },
     fan.DOMAIN: {
         MAPPING_DEFAULT: TYPE_THERMOSTAT,
         TYPE_HUMIDIFIER: [
@@ -54,21 +69,28 @@ DOMAIN_TO_YANDEX_TYPES = {
     group.DOMAIN: TYPE_SWITCH,
     input_boolean.DOMAIN: TYPE_SWITCH,
     light.DOMAIN: TYPE_LIGHT,
-    lock.DOMAIN: TYPE_OTHER,
+    lock.DOMAIN: TYPE_OPENABLE,
     media_player.DOMAIN: {
         MAPPING_DEFAULT: TYPE_MEDIA_DEVICE,
-        TYPE_MEDIA_DEVICE_TV: lambda h, s, c: s.attributes.get(ATTR_DEVICE_CLASS) == media_player.DEVICE_CLASS_TV,
+        TYPE_MEDIA_DEVICE_TV: [media_player.DEVICE_CLASS_TV],
+        TYPE_MEDIA_DEVICE_TV_BOX: [
+            adb.media_player.DEVICE_ANDROIDTV,
+            adb.media_player.DEVICE_FIRETV
+        ],
     },
     scene.DOMAIN: TYPE_OTHER,
     script.DOMAIN: TYPE_OTHER,
-    switch.DOMAIN: TYPE_SWITCH,
+    switch.DOMAIN: {
+        MAPPING_DEFAULT: TYPE_SWITCH,
+        TYPE_SOCKET: [switch.DEVICE_CLASS_OUTLET],
+    },
     vacuum.DOMAIN: TYPE_VACUUM_CLEANER,
 }
 
 
 def get_supported_types():
     supported_types = {}
-    for domain, yandex_type in DOMAIN_TO_YANDEX_TYPES.items():
+    for _, yandex_type in DOMAIN_TO_YANDEX_TYPES.items():
         if isinstance(yandex_type, dict):
             for key, val in yandex_type.items():
                 if key == MAPPING_DEFAULT:
@@ -91,7 +113,11 @@ def determine_state_type(hass: HomeAssistantType, state: State, entity_config):
                 default_type = mapping_function
             elif isinstance(mapping_function, list):
                 for func in mapping_function:
-                    if func(hass, state, entity_config):
+                    if isinstance(func, list):
+                        device_class = state.attributes.get(ATTR_DEVICE_CLASS)
+                        if device_class in func:
+                            return subtype
+                    elif func(hass, state, entity_config):
                         return subtype
             elif mapping_function(hass, state, entity_config):
                 return subtype

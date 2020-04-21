@@ -3,7 +3,7 @@ import logging
 from json import loads
 
 from aiohttp.web import Request, Response
-# Typing imports
+
 from homeassistant.components.http import HomeAssistantView
 
 from .const import DOMAIN
@@ -25,7 +25,7 @@ class YandexSmartHomeUnauthorizedView(HomeAssistantView):
 
     async def head(self, request: Request) -> Response:
         """Handle Yandex Smart Home HEAD requests."""
-        if self.config(request) is None:
+        if not self.config(request):
             return Response(status=404)
 
         _LOGGER.debug("Request: %s (HEAD)" % request.url)
@@ -47,7 +47,8 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
 
     async def post(self, request: Request) -> Response:
         """Handle Yandex Smart Home POST requests."""
-        if self.config(request) is None:
+        config = self.config(request)
+        if not config:
             return Response(status=404)
 
         request_body = await request.text()
@@ -55,7 +56,7 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
         _LOGGER.debug("Request: %s (POST data: %s)" % (request.url, message))
         result = await async_handle_message(
             request.app['hass'],
-            self.config(request),
+            config,
             request['hass_user'].id,
             request.headers.get('X-Request-Id'),
             request.path.replace(self.url, '', 1),
@@ -65,13 +66,14 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
 
     async def get(self, request: Request) -> Response:
         """Handle Yandex Smart Home GET requests."""
-        if self.config(request) is None:
+        config = self.config(request)
+        if not config:
             return Response(status=404)
 
         _LOGGER.debug("Request: %s" % request.url)
         result = await async_handle_message(
             request.app['hass'],
-            self.config(request),
+            config,
             request['hass_user'].id,
             request.headers.get('X-Request-Id'),
             request.path.replace(self.url, '', 1),

@@ -2,15 +2,20 @@
 import logging
 from asyncio import gather
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
-from homeassistant.const import CONF_NAME, STATE_UNAVAILABLE
-from homeassistant.core import Context, callback
+from homeassistant.const import (
+    CONF_NAME, STATE_UNAVAILABLE, ATTR_SUPPORTED_FEATURES,
+    ATTR_DEVICE_CLASS
+)
+from homeassistant.core import Context, callback, State
+from homeassistant.helpers.typing import HomeAssistantType
 
-from . import capability
+from . import capability, prop
 from .const import (
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE, ERR_DEVICE_UNREACHABLE,
-    ERR_INVALID_VALUE, CONF_ROOM, PREFIX_TYPES, CONF_EXPOSE_AS,
+    ERR_INVALID_VALUE, CONF_ROOM, PREFIX_TYPES, CONF_TYPE,
+    CONF_ENTITY_PROPERTIES
 )
 from .error import SmartHomeError
 from .type_mapper import determine_state_type
@@ -30,11 +35,6 @@ class Config:
         self.entity_config = entity_config or {}
         self.sensor_status = None
 
-        for entity_id, entity_config in self.entity_config.items():
-            expose_as = entity_config.get(CONF_EXPOSE_AS)
-            if expose_as and not expose_as.startswith(PREFIX_TYPES):
-                self.entity_config[entity_id][CONF_EXPOSE_AS] = PREFIX_TYPES + expose_as
-
 
 class RequestData:
     """Hold data associated with a particular request."""
@@ -49,12 +49,13 @@ class RequestData:
 class YandexEntity:
     """Adaptation of Entity expressed in Yandex's terms."""
 
-    def __init__(self, hass, config, state):
+    def __init__(self, hass: HomeAssistantType, config: Dict, state: State):
         """Initialize a Yandex Smart Home entity."""
         self.hass = hass
         self.config = config
         self.state = state
         self._capabilities = None
+        self._properties = None
 
     @property
     def entity_id(self):
@@ -68,14 +69,40 @@ class YandexEntity:
             return self._capabilities
 
         state = self.state
+        domain = state.domain
+        features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
         entity_config = self.config.entity_config.get(state.entity_id, {})
+        attributes = state.attributes
 
         self._capabilities = [
             Capability(self.hass, state, entity_config)
             for Capability in capability.CAPABILITIES
-            if Capability.supported(state, entity_config)
+            if Capability.supported(domain, features, entity_config, attributes)
+            or Capability.has_override(domain, entity_config, attributes)
         ]
+
         return self._capabilities
+
+    @callback
+    def properties(self):
+        """Return properties for entity."""
+        if self._properties is not None:
+            return self._properties
+
+        state = self.state
+        domain = state.domain
+        features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+        entity_config = self.config.entity_config.get(state.entity_id, {})
+        attributes = state.attributes
+
+        self._properties = [
+            Property(self.hass, state, entity_config)
+            for Property in prop.PROPERTIES
+            if Property.supported(domain, features, entity_config, attributes)
+            or Property.has_override(domain, entity_config, attributes)
+        ]
+
+        return self._properties
 
     async def devices_serialize(self):
         """Serialize entity for a devices response.
@@ -86,7 +113,7 @@ class YandexEntity:
 
         # When a state is unavailable, the attributes that describe
         # capabilities will be stripped. For example, a light entity will miss
-        # the min/max boundaries. Therefore they will be excluded from a sync.
+        # the min/max mireds. Therefore they will be excluded from a sync.
         if state.state == STATE_UNAVAILABLE:
             return None
 
@@ -98,12 +125,13 @@ class YandexEntity:
             return None
 
         capabilities = self.capabilities()
+        properties = self.properties()
 
-        # Found no supported traits for this entity
-        if not capabilities:
+        # Found no supported capabilities for this entity
+        if not capabilities and not properties:
             return None
 
-        device_type = entity_config.get(CONF_EXPOSE_AS)
+        device_type = entity_config.get(CONF_TYPE)
         if device_type:
             _LOGGER.debug('Entity [%s] is forcefully exposed as `%s`' % (state.entity_id, device_type))
         else:
@@ -114,12 +142,18 @@ class YandexEntity:
             'name': name,
             'type': device_type,
             'capabilities': [],
+            'properties': [],
         }
 
         for cpb in capabilities:
             description = cpb.description()
             if description not in device['capabilities']:
                 device['capabilities'].append(description)
+
+        for ppt in properties:
+            description = ppt.description()
+            if description not in device['properties']:
+                device['properties'].append(description)
 
         room = entity_config.get(CONF_ROOM)
         if room:
@@ -143,11 +177,10 @@ class YandexEntity:
             for attr in ['manufacturer', 'model', 'sw_version']
             if getattr(device_entry, attr)
         }
-        _LOGGER.debug('device_info for `%s`: %s' % (state.entity_id, device_info))
         if device_info:
             device['device_info'] = device_info
 
-        if device_entry.area_id and 'room' not in device:
+        if 'room' not in device and device_entry.area_id:
             area_reg = await self.hass.helpers.area_registry.async_get_registry()
 
             area_entry = area_reg.areas.get(device_entry.area_id)
@@ -173,9 +206,14 @@ class YandexEntity:
             if cpb.retrievable:
                 capabilities.append(cpb.get_state())
 
+        properties = []
+        for ppt in self.properties():
+            properties.append(ppt.get_state())
+
         return {
             'id': state.entity_id,
             'capabilities': capabilities,
+            'properties': properties,
         }
 
     async def execute(self, data, capability_type, state):
@@ -225,3 +263,13 @@ def deep_update(target, source):
         else:
             target[key] = value
     return target
+
+
+def get_child_instances(cls):
+    instance_collection = []
+    for subclass in cls.__subclasses__():
+        if subclass.instance:
+            instance_collection.append(subclass.instance)
+        instance_collection.extend(get_child_instances(subclass))
+    
+    return instance_collection
