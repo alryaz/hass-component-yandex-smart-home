@@ -70,6 +70,10 @@ UNIT_MILLIVOLT = "mV"
 UNIT_MEGAVOLT = "MV"
 UNIT_AMPERE = "A"
 
+# Custom device classes for cross-compatibility
+DEVICE_CLASS_ANDROIDTV = "androidtv"
+DEVICE_CLASS_FIRETV = "firetv"
+
 # Error codes
 # https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/response-codes-docpage/
 ERR_DEVICE_UNREACHABLE = "DEVICE_UNREACHABLE"

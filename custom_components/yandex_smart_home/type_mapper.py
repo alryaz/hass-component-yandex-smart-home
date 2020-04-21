@@ -2,7 +2,6 @@
 
 from homeassistant.components import (
     automation,
-    androidtv as adb,
     binary_sensor,
     camera,
     climate,
@@ -38,6 +37,8 @@ from .const import (
     TYPE_HUMIDIFIER,
     ATTR_MODEL,
     ATTR_TARGET_HUMIDITY,
+    DEVICE_CLASS_ANDROIDTV,
+    DEVICE_CLASS_FIRETV,
 )
 
 MAPPING_DEFAULT = "default"
@@ -74,8 +75,8 @@ DOMAIN_TO_YANDEX_TYPES = {
         MAPPING_DEFAULT: TYPE_MEDIA_DEVICE,
         TYPE_MEDIA_DEVICE_TV: [media_player.DEVICE_CLASS_TV],
         TYPE_MEDIA_DEVICE_TV_BOX: [
-            adb.media_player.DEVICE_ANDROIDTV,
-            adb.media_player.DEVICE_FIRETV
+            DEVICE_CLASS_ANDROIDTV,
+            DEVICE_CLASS_FIRETV
         ],
     },
     scene.DOMAIN: TYPE_OTHER,
