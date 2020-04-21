@@ -54,8 +54,7 @@ ENTITY_SCHEMA = vol.Schema(
         vol.Optional(CONF_ENTITY_TOGGLES, default={}): {TOGGLE_INSTANCE_SCHEMA: cv.entity_id},
         vol.Optional(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID): cv.boolean,
         vol.Optional(CONF_RELATIVE_VOLUME_ONLY): cv.boolean,
-        vol.Optional(CONF_INPUT_SOURCES): vol.Any(cv.boolean, {vol.In(MODES_NUMERIC):
-                                                                   cv.string}),
+        vol.Optional(CONF_INPUT_SOURCES, default=True): vol.Any(cv.boolean, {vol.In(MODES_NUMERIC): cv.string}),
         vol.Optional(CONF_SCRIPT_CHANNEL_UP): cv.SCRIPT_SCHEMA,
         vol.Optional(CONF_SCRIPT_CHANNEL_DOWN): cv.SCRIPT_SCHEMA,
     }

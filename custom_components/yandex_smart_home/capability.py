@@ -555,7 +555,7 @@ class ProgramCapability(_ModeCapability):
             if local_program == program:
                 return yandex_program
 
-        return "auto"
+        return MODES_NUMERIC[0]
 
     async def set_state(self, data: 'RequestData', state: Dict):
         """Set device state."""
@@ -698,7 +698,7 @@ class InputSourceCapability(_ModeCapability):
             if local_source == source:
                 return yandex_source
 
-        return "auto"
+        return MODES_NUMERIC[0]
 
     async def set_state(self, data: 'RequestData', state: Dict):
         """Set device state."""

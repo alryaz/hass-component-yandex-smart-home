@@ -52,20 +52,20 @@ DOMAIN_TO_YANDEX_TYPES = {
     },
     cover.DOMAIN: {
         MAPPING_DEFAULT: TYPE_OPENABLE,
-        TYPE_OPENABLE_CURTAIN: lambda h, s, c: s.attributes.get(ATTR_DEVICE_CLASS) in (
+        TYPE_OPENABLE_CURTAIN: [
             cover.DEVICE_CLASS_SHADE,
             cover.DEVICE_CLASS_SHUTTER,
             cover.DEVICE_CLASS_CURTAIN,
             cover.DEVICE_CLASS_BLIND,
             cover.DEVICE_CLASS_AWNING,
-        )
+        ]
     },
     fan.DOMAIN: {
         MAPPING_DEFAULT: TYPE_THERMOSTAT,
-        TYPE_HUMIDIFIER: [
-            lambda h, s, c: s.attributes.get(ATTR_MODEL, '').startswith("zhimi.humidifier."),  # Xiaomi Humidifiers
-            lambda h, s, c: s.attributes.get(ATTR_TARGET_HUMIDITY) is not None,  # WeMo Humidifiers
-        ],
+        TYPE_HUMIDIFIER: lambda h, s, c: (
+            s.attributes.get(ATTR_MODEL, '').startswith("zhimi.humidifier.") or # Xiaomi Humidifiers
+            s.attributes.get(ATTR_TARGET_HUMIDITY) is not None # WeMo Humidifiers
+        )
     },
     group.DOMAIN: TYPE_SWITCH,
     input_boolean.DOMAIN: TYPE_SWITCH,
@@ -73,7 +73,9 @@ DOMAIN_TO_YANDEX_TYPES = {
     lock.DOMAIN: TYPE_OPENABLE,
     media_player.DOMAIN: {
         MAPPING_DEFAULT: TYPE_MEDIA_DEVICE,
-        TYPE_MEDIA_DEVICE_TV: [media_player.DEVICE_CLASS_TV],
+        TYPE_MEDIA_DEVICE_TV: [
+            media_player.DEVICE_CLASS_TV,
+        ],
         TYPE_MEDIA_DEVICE_TV_BOX: [
             DEVICE_CLASS_ANDROIDTV,
             DEVICE_CLASS_FIRETV
@@ -106,23 +108,20 @@ def get_supported_types():
 
 def determine_state_type(hass: HomeAssistantType, state: State, entity_config):
     """Yandex type based on domain and device class."""
-    yandex_type = DOMAIN_TO_YANDEX_TYPES.get(state.domain, TYPE_OTHER)
+    default_type = TYPE_OTHER
+    yandex_type = DOMAIN_TO_YANDEX_TYPES.get(state.domain)
     if isinstance(yandex_type, dict):
-        default_type = TYPE_OTHER
         for subtype, mapping_function in yandex_type.items():
             if subtype == MAPPING_DEFAULT:
                 default_type = mapping_function
-            elif isinstance(mapping_function, list):
-                for func in mapping_function:
-                    if isinstance(func, list):
-                        device_class = state.attributes.get(ATTR_DEVICE_CLASS)
-                        if device_class in func:
-                            return subtype
-                    elif func(hass, state, entity_config):
-                        return subtype
-            elif mapping_function(hass, state, entity_config):
-                return subtype
 
-        return default_type
+            elif callable(mapping_function):
+                if mapping_function(hass, state, entity_config):
+                    return subtype
 
-    return yandex_type
+            else:
+                device_class = state.attributes.get(ATTR_DEVICE_CLASS)
+                if device_class in mapping_function:
+                    return subtype
+
+    return default_type

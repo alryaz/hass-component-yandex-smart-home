@@ -134,7 +134,7 @@ class _FloatProperty(_Property):
         else:
             state = self.state
 
-        if state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return 0.0
         
         if CONF_ENTITY_PROPERTY_ATTRIBUTE in property_config:
