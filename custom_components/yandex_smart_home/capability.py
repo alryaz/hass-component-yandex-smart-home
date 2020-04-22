@@ -515,11 +515,47 @@ class ProgramCapability(_ModeCapability):
     """Program functionality."""
     instance = "program"
 
+    program_attributes = {
+        (climate.DOMAIN, climate.SUPPORT_PRESET_MODE): (
+            climate.ATTR_PRESET_MODES,
+            climate.ATTR_PRESET_MODE,
+            climate.SERVICE_SET_PRESET_MODE,
+        ),
+        (light.DOMAIN, light.SUPPORT_EFFECT): (
+            light.ATTR_EFFECT_LIST,
+            light.ATTR_EFFECT,
+            light.SERVICE_TURN_ON,
+        ),
+    }
+
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config):
+        super().__init__(hass, state, entity_config)
+
+        attributes = self._get_program_attributes(
+            state.domain,
+            state.attributes.get(ATTR_SUPPORTED_FEATURES)
+        )
+
+        if attributes:
+            self._attr_list = attributes[0]
+            self._attr_value = attributes[1]
+            self._set_service = attributes[2]
+        else:
+            self._attr_list = None
+            self._attr_value = None
+            self._set_service = None
+
+
+    @classmethod
+    def _get_program_attributes(cls, domain: str, features: int):
+        for (supp_domain, feature), attributes in cls.program_attributes.items():
+            if domain == supp_domain and features & feature:
+                return attributes
+        return None
+
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        if domain == climate.DOMAIN:
-            return features & climate.SUPPORT_PRESET_MODE
-        return False
+        return bool(cls._get_program_attributes(domain, features))
 
     def parameters(self):
         custom_programs = self.entity_config.get(CONF_PROGRAMS)
@@ -529,7 +565,7 @@ class ProgramCapability(_ModeCapability):
                 for v in custom_programs.keys()
             ]
         else:
-            program_list = self.state.attributes.get(climate.ATTR_PRESET_MODES, [])
+            program_list = self.state.attributes.get(self._attr_list, [])
             modes = [
                 {"value": MODES_NUMERIC[i]}
                 for i in range(0, min(len(program_list), 10))
@@ -542,13 +578,13 @@ class ProgramCapability(_ModeCapability):
 
     def get_value_default(self) -> Any:
         """Return the state value of this capability for this entity."""
-        program = self.state.attributes.get(climate.ATTR_PRESET_MODE)
+        program = self.state.attributes.get(self._attr_value)
         custom_programs = self.entity_config.get(CONF_PROGRAMS)
 
         if isinstance(custom_programs, dict):
             iterator = custom_programs.items()
         else:
-            program_list = self.state.attributes.get(climate.ATTR_PRESET_MODES, [])
+            program_list = self.state.attributes.get(self._attr_list, [])
             iterator = zip(MODES_NUMERIC, program_list)
 
         for yandex_program, local_program in iterator:
@@ -565,16 +601,16 @@ class ProgramCapability(_ModeCapability):
         if isinstance(custom_programs, dict):
             iterator = custom_programs.items()
         else:
-            program_list = self.state.attributes.get(climate.ATTR_PRESET_MODES, [])
+            program_list = self.state.attributes.get(self._attr_list, [])
             iterator = zip(MODES_NUMERIC, program_list)
         
         for yandex_program, local_program in iterator:
             if yandex_program == new_program:
                 return await self.hass.services.async_call(
-                    climate.DOMAIN,
-                    climate.SERVICE_SET_PRESET_MODE, {
+                    self.state.domain,
+                    self._set_service, {
                         ATTR_ENTITY_ID: self.state.entity_id,
-                        climate.ATTR_PRESET_MODE: local_program,
+                        self._attr_value: local_program,
                     }, blocking=True, context=data.context)
 
         raise SmartHomeError(ERR_INVALID_VALUE, "Unacceptable value")

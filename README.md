@@ -203,6 +203,7 @@ _This is a work-in-progress summary, there are more features to mention_
     - [ ] Color setting via HSV: `color_setting.hsv` _(unknown whether support is required)_
     - [x] Brightness capability: `range.brightness`
     - [x] Backlight toggle: `toggle.backlight`
+    - [x] Effect switching: `mode.program`
 
 - [x] Switches: `switch`
   - [x] Matching domain exposure:
