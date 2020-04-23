@@ -102,13 +102,21 @@ async def async_devices_query(hass, data, message):
     """
     devices = []
     for device in message.get('devices', []):
-        devid = device['id']
-        state = hass.states.get(devid)
+        entity_id = device['id']
+
+        if not data.config.should_expose(state.entity_id):
+            devices.append({
+                'id': entity_id,
+                'error_code': ERR_DEVICE_NOT_FOUND,
+            })
+            continue
+
+        state = hass.states.get(entity_id)
 
         if not state:
             # If we can't find a state, the device is unreachable
             devices.append({
-                'id': devid,
+                'id': entity_id,
                 'error_code': ERR_DEVICE_UNREACHABLE
             })
             continue
@@ -116,7 +124,7 @@ async def async_devices_query(hass, data, message):
         entity = YandexEntity(hass, data.config, state)
         devices.append(entity.query_serialize())
 
-    yandex_sensor = hass.data.get(DOMAIN).sensor_status
+    yandex_sensor = data.config.sensor_status
     if yandex_sensor:
         yandex_sensor.record_sync(datetime.now(), devices)
 
@@ -139,12 +147,19 @@ async def handle_devices_execute(hass, data, message):
         devices[entity_id] = device
 
         if entity_id not in entities:
-            state = hass.states.get(entity_id)
-
-            if state is None:
+            if not data.config.should_expose(state.entity_id):
                 results[entity_id] = {
                     'id': entity_id,
                     'error_code': ERR_DEVICE_NOT_FOUND,
+                }
+                continue
+
+            state = hass.states.get(entity_id)
+
+            if not state:
+                results[entity_id] = {
+                    'id': entity_id,
+                    'error_code': ERR_DEVICE_UNREACHABLE,
                 }
                 continue
 
@@ -203,7 +218,7 @@ async def handle_devices_execute(hass, data, message):
             'capabilities': capabilities,
         })
 
-    yandex_sensor = hass.data.get(DOMAIN).sensor_status
+    yandex_sensor = data.config.sensor_status
     if yandex_sensor:
         yandex_sensor.record_action(datetime.now(), entities)
 

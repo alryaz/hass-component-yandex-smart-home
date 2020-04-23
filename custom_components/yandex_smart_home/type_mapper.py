@@ -39,6 +39,7 @@ from .const import (
     ATTR_TARGET_HUMIDITY,
     DEVICE_CLASS_ANDROIDTV,
     DEVICE_CLASS_FIRETV,
+    ATTR_YANDEX_TYPE,
 )
 
 MAPPING_DEFAULT = "default"
@@ -108,6 +109,9 @@ def get_supported_types():
 
 def determine_state_type(hass: HomeAssistantType, state: State, entity_config):
     """Yandex type based on domain and device class."""
+    if ATTR_YANDEX_TYPE in state.attributes:
+        return state.attributes[ATTR_YANDEX_TYPE]
+        
     default_type = TYPE_OTHER
     yandex_type = DOMAIN_TO_YANDEX_TYPES.get(state.domain)
     if isinstance(yandex_type, dict):

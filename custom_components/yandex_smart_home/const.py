@@ -25,10 +25,13 @@ ATTR_LAST_ACTION_TIME = "last_command_time"
 ATTR_LAST_ACTION_TARGETS = "last_command_targets"
 ATTR_LAST_SYNC_TIME = "last_sync_time"
 ATTR_SYNCED_DEVICES_COUNT = "synced_devices_count"
+
+# Additional attributes accessed within code
 ATTR_MODEL = "model"
 ATTR_TARGET_HUMIDITY = "target_humidity"
 ATTR_CURRENT_POWER_W = "current_power_w"
 ATTR_WATER_LEVEL = "water_level"
+ATTR_YANDEX_TYPE = "yandex_type"
 
 # Yandex device types
 # https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types-docpage/
