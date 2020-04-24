@@ -116,6 +116,9 @@ yandex_smart_home:
             (string) (Optional) Custom entity, any sensor can be added 
           attribute:
             (string) (Optional) Attribute of an object to receive data
+
+  diagnostics_mode:
+    (boolean) (Optional) Enable diagnostics mode (Unauthorized requests will be allowed; never use this option in production environment!)
 ```
 
 
@@ -124,6 +127,11 @@ When exposing device under a domain different from default confirm compatibility
 [Yandex API documentation](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types-docpage/) by
 comparing sets of capabilities expected from default and target domains. Very common custom exposure would
 be rendering a `switch` entity (example above) as a `socket`.
+
+Alternative way to override device type is to use `yandex_type` entity attribute. Enable expert configuration mode
+in HomeAssistant and open `Customize` menu. From there you will be able to add a custom attribute. The preference,
+however, will be given to the option provided in the addon configuration; therefore, if you have custom type
+specified using both methods above, the former will be provided to Yandex.
 
 ### Room/Area support &mdash; `room` option
 Entities that have not got rooms explicitly set and that have been placed in Home Assistant areas will return
@@ -146,6 +154,14 @@ Client identifier | https://social.yandex.net/
 API authorization endpoint | https://[YOUR HOME ASSISTANT URL:PORT]/auth/authorize
 Token Endpoint | https://[YOUR HOME ASSISTANT URL:PORT]/auth/token
 Refreshing an Access Token | https://[YOUR HOME ASSISTANT URL:PORT]/auth/token
+
+### Diagnostics mode
+Diagnostics mode can only be enabled using YAML configuration by adding `diagnostics_mode: true` to `yandex_smart_home` domain configuration.
+This mode allows unauthorized requests to be processed. This is technically an alternative to requesting devices via Yandex' own testing
+interface, however it also allows to craft custom requests offline. **DO NOT ENABLE THIS MODE IN PRODUCTION ENVIRONMENT!**
+
+Upon enabling, a persistent notification will appear with a list of supported URLs. All of the provided URLs will open in a new tab.
+Using a JSON-formatting extension is recommended.
 
 ### Supported HomeAssistant domains
 _This is a work-in-progress summary, there are more features to mention_
@@ -208,7 +224,7 @@ _This is a work-in-progress summary, there are more features to mention_
 - [x] Switches: `switch`
   - [x] Matching domain exposure:
     - [x] Default exposure: `devices.types.switch`
-    - [x] Switches with sockets as class: `devices.types.socket`
+    - [x] Switches with `socket` as device class: `devices.types.socket`
   - [x] Capabilities:
     - [x] Turn on/off: `on_off`
   - [x] Properties:

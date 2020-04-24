@@ -18,6 +18,7 @@ from .const import (
     PREFIX_TYPES, CONF_ENTITY_PROPERTIES, CONF_ENTITY_TOGGLES)  # pylint: disable=unused-import
 from .type_mapper import get_supported_types, DOMAIN_TO_YANDEX_TYPES
 from .capability import _ToggleCapability
+from .helpers import get_child_instances
 
 CONF_CUSTOMIZE_EXPOSURE = "customize_exposure"
 YANDEX_DEVICE_SUBTYPES = sorted(map(lambda x: x.replace(PREFIX_TYPES, ''), get_supported_types()))
@@ -296,7 +297,7 @@ class YandexSmartHomeFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if self._available_toggles is None:
             self._available_toggles = {
                 vol.Optional(instance, default=''): str
-                for instance in _ToggleCapability.get_child_instances()
+                for instance in get_child_instances(_ToggleCapability)
             }
         return self._available_toggles
 

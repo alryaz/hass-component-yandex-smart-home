@@ -104,7 +104,7 @@ async def async_devices_query(hass, data, message):
     for device in message.get('devices', []):
         entity_id = device['id']
 
-        if not data.config.should_expose(state.entity_id):
+        if not data.config.should_expose(entity_id):
             devices.append({
                 'id': entity_id,
                 'error_code': ERR_DEVICE_NOT_FOUND,
@@ -147,7 +147,7 @@ async def handle_devices_execute(hass, data, message):
         devices[entity_id] = device
 
         if entity_id not in entities:
-            if not data.config.should_expose(state.entity_id):
+            if not data.config.should_expose(entity_id):
                 results[entity_id] = {
                     'id': entity_id,
                     'error_code': ERR_DEVICE_NOT_FOUND,

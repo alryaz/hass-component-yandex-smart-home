@@ -19,7 +19,7 @@ from .const import (
     CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN,
     ATTR_LAST_ACTION_TARGETS, ATTR_LAST_ACTION_TIME,
     ATTR_LAST_SYNC_TIME, DATA_YANDEX_SMART_HOME_CONFIG,
-    
+    CONF_DIAGNOSTICS_MODE
 )
 from .helpers import Config, get_child_instances
 from .http import YandexSmartHomeUnauthorizedView, YandexSmartHomeView
@@ -64,6 +64,7 @@ YANDEX_SMART_HOME_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_FILTER, default={}): ef.FILTER_SCHEMA,
         vol.Optional(CONF_ENTITY_CONFIG, default={}): {cv.entity_id: ENTITY_SCHEMA},
+        vol.Optional(CONF_DIAGNOSTICS_MODE, default=False): cv.boolean,
     }
 )
 
@@ -131,10 +132,38 @@ async def async_setup_entry(hass: HomeAssistantType, config_entry: ConfigEntry):
     # Get entity config from configuration
     entity_config = config.get(CONF_ENTITY_CONFIG, {})
 
+    # Check for diagnostics mode
+    diagnostics_mode = config.get(CONF_DIAGNOSTICS_MODE)
+    if diagnostics_mode:
+        from homeassistant.components.persistent_notification import async_create as create_notification
+        from .http import YandexSmartHomeView
+
+        contents = "Diagnostics mode is enabled. Your Yandex Smart home setup will become vulnerable to external unauthorized requests. Please, use with caution."
+        
+        contents_links = "Links (will open in a new tab):"
+        base_url = hass.config.api.base_url
+        for url in [YandexSmartHomeView.url] + YandexSmartHomeView.extra_urls:
+            target_url = base_url + url if base_url else url
+            contents_links += '\n- <a href="%s" target="_blank">%s</a>' % (target_url, url)
+        contents_links += (
+            '\n\nJSON Formatter extension for chromium-based browsers: '
+            '<a href="https://chrome.google.com/webstore/detail/bcjindcccaagfpapjjmafapmmgkkhgoa" target="_blank">Chrome Web Store</a>, '
+            '<a href="https://github.com/callumlocke/json-formatter" target="_blank">GitHub</a>'
+        )
+
+        create_notification(
+            hass,
+            contents + "\n\n" + contents_links,
+            "Yandex Smart Home Diagnostics Mode",
+            "yandex_smart_home_diagnostics_mode"
+        )
+        _LOGGER.warning(contents)
+
     # Create configuration object (and thus enable HTTP request serving)
     hass.data[DOMAIN] = Config(
         should_expose=should_expose,
-        entity_config=entity_config
+        entity_config=entity_config,
+        diagnostics_mode=diagnostics_mode
     )
 
     # Create Yandex request statistics sensor

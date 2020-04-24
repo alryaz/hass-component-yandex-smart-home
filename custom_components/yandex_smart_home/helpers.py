@@ -29,11 +29,12 @@ _LOGGER = logging.getLogger(__name__)
 class Config:
     """Hold the configuration for Yandex Smart Home."""
 
-    def __init__(self, should_expose, entity_config=None):
+    def __init__(self, should_expose, entity_config=None, diagnostics_mode=False):
         """Initialize the configuration."""
         self.should_expose = should_expose
         self.entity_config = entity_config or {}
         self.sensor_status = None
+        self.diagnostics_mode = diagnostics_mode
 
 
 class RequestData:
@@ -159,6 +160,16 @@ class YandexEntity:
         if room:
             device['room'] = room
 
+        device_info_attributes = ['manufacturer', 'model', 'sw_version', 'hw_version']
+        device_info = {}
+        for attr in device_info_attributes:
+            value = state.attributes.get(attr)
+            if value:
+                device_info[attr] = value
+
+        if device_info:
+            device['device_info'] = device_info
+
         dev_reg, ent_reg = await gather(
             self.hass.helpers.device_registry.async_get_registry(),
             self.hass.helpers.entity_registry.async_get_registry(),
@@ -169,14 +180,17 @@ class YandexEntity:
             return device
 
         device_entry = dev_reg.devices.get(entity_entry.device_id)  # type: DeviceEntry
+
         if not device_entry:
             return device
 
-        device_info = {
-            attr: getattr(device_entry, attr)
-            for attr in ['manufacturer', 'model', 'sw_version']
-            if getattr(device_entry, attr)
-        }
+        for attr in device_info_attributes:
+            # Device info overrides entity attributes
+            # This may change in the future
+            value = getattr(device_entry, attr) if hasattr(device_entry, attr) else None
+            if value:
+                device_info[attr] = value
+
         if device_info:
             device['device_info'] = device_info
 

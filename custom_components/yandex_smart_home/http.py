@@ -1,13 +1,22 @@
 """Support for Yandex Smart Home."""
 import logging
 from json import loads
+from typing import TYPE_CHECKING, Tuple, Union, Optional
+from types import SimpleNamespace
+from uuid import uuid4
 
 from aiohttp.web import Request, Response
+from aiohttp.web_exceptions import HTTPUnauthorized, HTTPBadRequest, HTTPNotFound
 
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.exceptions import Unauthorized
 
 from .const import DOMAIN
 from .smart_home import async_handle_message
+
+if TYPE_CHECKING:
+    from homeassistant.auth.models import User
+    from .helpers import Config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +29,7 @@ class YandexSmartHomeUnauthorizedView(HomeAssistantView):
     requires_auth = False
 
     @classmethod
-    def config(cls, request):
+    def config(cls, request: Request) -> 'Config':
         return request.app['hass'].data.get(DOMAIN)
 
     async def head(self, request: Request) -> Response:
@@ -43,13 +52,31 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
         url + '/user/devices/action',
     ]
     name = 'api:yandex_smart_home'
-    requires_auth = True
+    requires_auth = False  # this is handled manually within `_process_auth` method
+
+    def _process_auth(self, request: Request) -> Tuple['Config', Union[SimpleNamespace, 'User'], Optional[str]]:
+        config = self.config(request)
+        if not config:
+            raise HTTPNotFound()
+
+        hass_user = request.get('hass_user')
+        request_id = request.headers.get('X-Request-Id')
+        if config.diagnostics_mode:
+            # Facilitate the use of diagnostics mode by adding dummy data to the request
+            if not hass_user:
+                hass_user = SimpleNamespace(id=999999)
+            if not request_id:
+                request_id = str(uuid4()).upper()
+        elif not hass_user:
+            raise HTTPUnauthorized()
+        elif not request_id:
+            raise HTTPBadRequest()
+        
+        return config, hass_user, request_id
 
     async def post(self, request: Request) -> Response:
         """Handle Yandex Smart Home POST requests."""
-        config = self.config(request)
-        if not config:
-            return Response(status=404)
+        config, hass_user, request_id = self._process_auth(request)
 
         request_body = await request.text()
         message = loads(request_body) if request_body else {}
@@ -57,8 +84,8 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
         result = await async_handle_message(
             request.app['hass'],
             config,
-            request['hass_user'].id,
-            request.headers.get('X-Request-Id'),
+            hass_user.id,
+            request_id,
             request.path.replace(self.url, '', 1),
             message)
         _LOGGER.debug("Response: %s", result)
@@ -66,16 +93,14 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
 
     async def get(self, request: Request) -> Response:
         """Handle Yandex Smart Home GET requests."""
-        config = self.config(request)
-        if not config:
-            return Response(status=404)
+        config, hass_user, request_id = self._process_auth(request)
 
         _LOGGER.debug("Request: %s" % request.url)
         result = await async_handle_message(
             request.app['hass'],
             config,
-            request['hass_user'].id,
-            request.headers.get('X-Request-Id'),
+            hass_user.id,
+            request_id,
             request.path.replace(self.url, '', 1),
             {})
         _LOGGER.debug("Response: %s" % result)
