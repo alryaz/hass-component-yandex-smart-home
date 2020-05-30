@@ -127,5 +127,7 @@ def determine_state_type(hass: HomeAssistantType, state: State, entity_config):
                 device_class = state.attributes.get(ATTR_DEVICE_CLASS)
                 if device_class in mapping_function:
                     return subtype
+    elif isinstance(yandex_type, str):
+        return yandex_type
 
     return default_type
