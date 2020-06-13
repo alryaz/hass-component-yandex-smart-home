@@ -1,13 +1,10 @@
 """Implement the Yandex Smart Home properties."""
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Type
 
-from custom_components.yandex_smart_home.const import ERR_NOT_SUPPORTED_IN_CURRENT_MODE
-from custom_components.yandex_smart_home.error import SmartHomeError
 from homeassistant.components import (
     climate,
     sensor,
-    switch,
     air_quality,
 )
 from homeassistant.const import (
@@ -15,17 +12,14 @@ from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     DEVICE_CLASS_HUMIDITY,
     DEVICE_CLASS_TEMPERATURE,
-    DEVICE_CLASS_POWER,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
-    POWER_WATT,
+    POWER_WATT, DEVICE_CLASS_BATTERY, UNIT_PERCENTAGE, CONF_ENTITY_ID,
 )
 
-from .const import (
+from custom_components.yandex_smart_home.const import (
     CONF_ENTITY_PROPERTIES,
-    CONF_ENTITY_PROPERTY_TYPE,
-    CONF_ENTITY_PROPERTY_ENTITY,
-    CONF_ENTITY_PROPERTY_ATTRIBUTE,
+    CONF_ATTRIBUTE,
     ATTR_CURRENT_POWER_W,
     ATTR_WATER_LEVEL,
     UNIT_VOLT,
@@ -40,16 +34,16 @@ _LOGGER = logging.getLogger(__name__)
 PREFIX_PROPERTIES = 'devices.properties.'
 PROPERTY_FLOAT = PREFIX_PROPERTIES + 'float'
 
-PROPERTIES = []
+PROPERTIES: List[Type['_Property']] = []
 
 
-def register_property(property):
+def register_property(prop):
     """Decorate a function to register a property."""
-    PROPERTIES.append(property)
-    return property
+    PROPERTIES.append(prop)
+    return prop
 
 
-class _Property(object):
+class _Property:
     """Represents a Property."""
     unit = ''
     type = ''
@@ -65,10 +59,10 @@ class _Property(object):
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        raise NotImplementedError("Properties must implement this!")
+        return False
 
     @classmethod
-    def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
+    def has_override(cls, _: str, entity_config: Dict, __: Dict) -> bool:
         entity_properties = entity_config.get(CONF_ENTITY_PROPERTIES)
         return bool(entity_properties) and bool(entity_properties.get(cls.instance))
 
@@ -125,23 +119,23 @@ class _FloatProperty(_Property):
         return float(self.state.state)
 
     def get_value_override(self) -> float:
-        attribute = None
         property_config = self.entity_config[CONF_ENTITY_PROPERTIES][self.instance]
 
-        if CONF_ENTITY_PROPERTY_ENTITY in property_config:
-            property_entity_id = property_config.get(CONF_ENTITY_PROPERTY_ENTITY)
+        if CONF_ENTITY_ID in property_config:
+            property_entity_id = property_config.get(CONF_ENTITY_ID)
             state = self.hass.states.get(property_entity_id)
         else:
             state = self.state
 
         if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return 0.0
-        
-        if CONF_ENTITY_PROPERTY_ATTRIBUTE in property_config:
-            attribute = property_config.get(CONF_ENTITY_PROPERTY_ATTRIBUTE)
+
+        if CONF_ATTRIBUTE in property_config:
+            attribute = property_config.get(CONF_ATTRIBUTE)
             return float(state.get(attribute, 0.0))
 
         return float(state.state)
+
 
 @register_property
 class TemperatureProperty(_FloatProperty):
@@ -283,7 +277,22 @@ class AmperageProperty(_FloatProperty):
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         return domain == sensor.DOMAIN and \
-            attributes.get(ATTR_UNIT_OF_MEASUREMENT) == UNIT_AMPERE
+               attributes.get(ATTR_UNIT_OF_MEASUREMENT) == UNIT_AMPERE
+
+    def get_value_default(self) -> float:
+        return float(self.state.state)
+
+
+@register_property
+class BatteryLevelProperty(_FloatProperty):
+    """Battery level property."""
+    instance = "battery_level"
+    unit = "unit.percent"
+
+    @classmethod
+    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        return attributes.get(ATTR_DEVICE_CLASS) == DEVICE_CLASS_BATTERY and \
+               attributes.get(ATTR_UNIT_OF_MEASUREMENT) == UNIT_PERCENTAGE
 
     def get_value_default(self) -> float:
         return float(self.state.state)

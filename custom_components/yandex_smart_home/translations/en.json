@@ -1,0 +1,100 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "Only a single configuration of Yandex Smart Home is allowed."
+    },
+    "error": {
+      "conflicting_entity_includes": "Included entities set intersects with excluded entities set",
+      "customization_unavailable_with_empty_includes": "Unable to initiate custom configuration without specifying entities",
+      "empty_entity_id": "One of provided entity IDs is empty",
+      "filter_without_entities": "Configured filter will not yield any entities. Add entities to include, or restart config flow to change domains.",
+      "invalid_domain": "Invalid entity domain provided",
+      "invalid_entity_attribute": "Invalid entity attribute provided",
+      "invalid_entity_id": "Invalid entity ID provided"
+    },
+    "step": {
+      "custom": {
+        "data": {
+          "backlight": "Backlight entity ID (must be toggleable)",
+          "channel_set_via_media_content_id": "Set channel via `media_content_id` attribute",
+          "properties": "Configure properties",
+          "toggles": "Configure toggles",
+          "type": "Expose entity as other type"
+        },
+        "description": "Configure additional parameters for \"{friendly_name}\" (`{entity_id}`).",
+        "title": "Customize: {entity_id}"
+      },
+      "custom_properties": {
+        "data": {
+          "amperage": "Current (Amperes)",
+          "battery_level": "Battery level (%)",
+          "co2_level": "CO\u2082  (ppm)",
+          "humidity": "Humidity (%)",
+          "power": "Power consumption (Watts)",
+          "temperature": "Temperature (\u2103)",
+          "voltage": "Voltage (Volts)",
+          "water_level": "Water level (%)"
+        },
+        "description": "Specify one of the following for required properties:\n- _empty_ \u2014 Determine automatically\n- `attribute` \u2014 Current entity attribute\n- `domain.id` \u2014 Other entity's state\n- `domain.id.attribute` \u2014 Attribute of other entity\n\nPage {page} of {pages}",
+        "title": "Properties configuration"
+      },
+      "custom_toggles": {
+        "data": {
+          "backlight": "Backlight",
+          "controls_locked": "Controls lock",
+          "ionization": "Ionization",
+          "keep_warm": "Keep warm",
+          "mute": "Mute volume",
+          "oscillation": "Oscillation",
+          "pause": "Pause"
+        },
+        "description": "Specify one of the following for required toggles:\n- _empty_ \u2014 Determine automatically\n- `domain.id` — Other entity's state\n\nPage {page} of {pages}",
+        "title": "Toggles configuration"
+      },
+      "selective": {
+        "data": {
+          "entity_config": "Customize included entities",
+          "exclude_entities": "Exclude entities (fan.three, cover.four, ...)",
+          "include_entities": "Include entities (switch.one, light.two, ...)"
+        },
+        "description": "Exposes/hides certain entities, overriding previous domain configuration. You can leave these fields empty by default.\n\nBy enabling included entities customization you will be able to enable additional features. You can read up on the list of current features on the [integration's GitHub page](https://github.com/alryaz/hass-component-yandex-smart-home/blob/master/README.md).",
+        "title": "Selective entity exposure"
+      },
+      "supported": {
+        "data": {
+          "climate": "Thermostats (`climate`)",
+          "cover": "Covers (`cover`)",
+          "fan": "Fans (`fan`)",
+          "group": "Groups (`group`)",
+          "input_boolean": "Boolean Inputs (`input_boolean`)",
+          "light": "Lights (`light`)",
+          "lock": "Locks (`lock`)",
+          "media_player": "Media Players (`media_player`)",
+          "switch": "Switches (`switch`)",
+          "vacuum": "Vacuums (`vacuum`)"
+        },
+        "description": "Select entity domains which you would like to expose to Yandex Smart Home service. This acts as a wildcard for all entities. You will be able to add per-entity filters later during setup.",
+        "title": "Configure entities for Yandex exposure"
+      },
+      "unsupported": {
+        "data": {
+          "automation": "Automations (`automation`)",
+          "binary_sensor": "Binary Sensors (`binary_sensor`)",
+          "camera": "Cameras (`camera`)",
+          "scene": "Scenes (`scene`)",
+          "script": "Scripts (`script`)"
+        },
+        "description": "The following domains are not briefly supported by Yandex, and therefore will remain untested until official support is added. Enable them at your own risk!",
+        "title": "Unsupported entity domains"
+      },
+      "user": {
+        "data": {
+          "advanced_configuration": "Advanced configuration (domains, entities, etc.)"
+        },
+        "description": "The following domains are exposed to Yandex by default: {domains}\n\nShould you be willing make any changes, tick the box below before continuing.",
+        "title": "Yandex Smart Home Setup"
+      }
+    },
+    "title": "Yandex Smart Home"
+  }
+}

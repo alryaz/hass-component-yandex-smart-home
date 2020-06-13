@@ -1,7 +1,6 @@
 """Implement the Yandex Smart Home capabilities."""
 import logging
-from abc import ABC
-from typing import Any, Optional, Dict, TYPE_CHECKING
+from typing import Any, Optional, Dict, TYPE_CHECKING, Tuple, Type, List, Union
 
 from homeassistant.components import (
     automation,
@@ -23,7 +22,6 @@ from homeassistant.components import (
 from homeassistant.components.water_heater import (
     STATE_ELECTRIC, SERVICE_SET_OPERATION_MODE
 )
-#from homeassistant.components.xiaomi_miio import fan as miio_fan
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_SUPPORTED_FEATURES,
@@ -35,23 +33,26 @@ from homeassistant.const import (
     SERVICE_LOCK,
     SERVICE_UNLOCK,
     STATE_OFF,
-    STATE_ON,
+    STATE_ON, CONF_ENTITY_ID,
+    CONF_MAXIMUM, CONF_MINIMUM
 )
 from homeassistant.core import DOMAIN as HA_DOMAIN, State
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.util import color as color_util
 
-from .const import (
+from custom_components.yandex_smart_home.const import (
     ERR_INVALID_VALUE,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE, CONF_PROGRAMS,
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY,
-    CONF_INPUT_SOURCES, MODES_NUMERIC, CONF_ENTITY_TOGGLES,
-    CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN)
-from .error import SmartHomeError
+    CONF_INPUT_SOURCES, CONF_ENTITY_TOGGLES,
+    CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN, CONF_ENTITY_MODES, CONF_MAPPING, ERR_INTERNAL_ERROR,
+    CONF_SET_SCRIPT, CONF_PRECISION, CONF_MULTIPLIER, CONF_ENTITY_RANGES, MODES_NUMERIC)
+from custom_components.yandex_smart_home.core.error import SmartHomeError, DefaultNotImplemented, \
+    OverrideNotImplemented
 
 if TYPE_CHECKING:
-    from .helpers import RequestData
+    from custom_components.yandex_smart_home.core.helpers import RequestData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ CAPABILITIES_RANGE = PREFIX_CAPABILITIES + 'range'
 CAPABILITIES_MODE = PREFIX_CAPABILITIES + 'mode'
 CAPABILITIES_COLOR_SETTING = PREFIX_CAPABILITIES + 'color_setting'
 
-CAPABILITIES = []
+CAPABILITIES: List[Type['_Capability']] = []
 
 
 def register_capability(capability):
@@ -74,8 +75,8 @@ def register_capability(capability):
 class _Capability(object):
     """Represents a Capability."""
 
-    type = ''
-    instance = ''
+    type = NotImplemented
+    instance = NotImplemented
     retrievable = True
 
     def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict):
@@ -87,7 +88,7 @@ class _Capability(object):
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Check whether current entity is supported."""
-        raise NotImplementedError("Capabilities must implement this!")
+        return False
 
     @classmethod
     def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
@@ -122,7 +123,16 @@ class _Capability(object):
 
     def parameters(self) -> Dict:
         """Return parameters for a devices request."""
-        raise NotImplementedError("Capabilities must implement this!")
+        ent_state = self.state
+        if self.has_override(ent_state.domain, self.entity_config, ent_state.attributes):
+            return self.parameters_override()
+        return self.parameters_default()
+
+    def parameters_default(self) -> Dict[str, Any]:
+        raise DefaultNotImplemented
+
+    def parameters_override(self) -> Dict[str, Any]:
+        raise OverrideNotImplemented
 
     def get_value(self) -> Any:
         """Return the state value of this capability for this entity."""
@@ -131,13 +141,13 @@ class _Capability(object):
             return self.get_value_override()
         return self.get_value_default()
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity using default mechanism."""
-        raise NotImplementedError("Capabilities must implement this!")
+        raise DefaultNotImplemented
 
-    def get_value_override(self) -> Any:
+    def get_value_override(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity using override."""
-        raise NotImplementedError("Capabilities can implement this!")
+        raise OverrideNotImplemented
 
     async def set_state(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
@@ -148,11 +158,11 @@ class _Capability(object):
 
     async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
-        raise NotImplementedError("Capabilities must implement this!")
+        raise DefaultNotImplemented
 
     async def set_state_override(self, data: 'RequestData', state: Dict) -> None:
         """Set device state using override."""
-        raise NotImplementedError("Capabilities can implement this!")
+        raise OverrideNotImplemented
 
 
 @register_capability
@@ -220,7 +230,7 @@ class OnOffCapability(_Capability):
         return None
 
     @classmethod
-    def issue_state_retrieval(cls, entity_state: State) -> Any:
+    def issue_state_retrieval(cls, entity_state: State) -> bool:
         """Return the state value of this capability for given entity."""
         entity_domain = entity_state.domain
         current_state = entity_state.state
@@ -240,7 +250,7 @@ class OnOffCapability(_Capability):
             return operation_mode != cls.get_water_heater_operation(STATE_OFF, operation_list)
         return current_state != STATE_OFF
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         return self.issue_state_retrieval(self.state)
 
@@ -301,11 +311,13 @@ class OnOffCapability(_Capability):
         else:
             service = SERVICE_TURN_ON if new_state else SERVICE_TURN_OFF
 
-        await hass.services.async_call(service_domain,
-                                            service,
-                                            service_data,
-                                            blocking=(entity_domain != script.DOMAIN),
-                                            context=data.context)
+        await hass.services.async_call(
+            service_domain,
+            service,
+            service_data,
+            blocking=(entity_domain != script.DOMAIN),
+            context=data.context
+        )
 
     async def set_state(self, data: 'RequestData', state: Dict):
         """Set state for this entity."""
@@ -348,13 +360,14 @@ class _ToggleCapability(_Capability):
         if entity_id:
             return hass.states.get(entity_id)
 
-    def get_value_override(self) -> bool:
+    def get_value_override(self) -> Optional[Union[str, float, int]]:
+        """Return override value."""
         override_entity_state = self.get_override_entity_state(self.hass, self.entity_config)
-        OnOffCapability.issue_state_retrieval(override_entity_state)
+        return OnOffCapability.issue_state_retrieval(override_entity_state)
 
     async def set_state_override(self, data: 'RequestData', state: Dict):
         override_entity_state = self.get_override_entity_state(self.hass, self.entity_config)
-        OnOffCapability.issue_state_command(self.hass, override_entity_state, data, state)
+        await OnOffCapability.issue_state_command(self.hass, override_entity_state, data, state)
 
 
 @register_capability
@@ -394,10 +407,9 @@ class MuteCapability(_ToggleCapability):
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and \
-             features & media_player.SUPPORT_VOLUME_MUTE
+        return domain == media_player.DOMAIN and features & media_player.SUPPORT_VOLUME_MUTE
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         muted = self.state.attributes.get(media_player.ATTR_MEDIA_VOLUME_MUTED)
 
@@ -432,7 +444,7 @@ class OscillationCapability(_ToggleCapability):
         return domain == fan.DOMAIN and \
             features & fan.SUPPORT_OSCILLATE
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state of oscillation for this entity."""
         return bool(self.state.attributes.get(fan.ATTR_OSCILLATING))
 
@@ -469,7 +481,7 @@ class PauseCapability(_ToggleCapability):
             return features & vacuum.SUPPORT_PAUSE
         return False
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         return self.state.state != media_player.STATE_PLAYING
 
@@ -495,9 +507,11 @@ class PauseCapability(_ToggleCapability):
 
         await self.hass.services.async_call(
             domain,
-            service, {
-                ATTR_ENTITY_ID: self.state.entity_id
-            }, blocking=True, context=data.context)
+            service,
+            service_data,
+            blocking=True,
+            context=data.context
+        )
 
 
 class _ModeCapability(_Capability):
@@ -508,12 +522,143 @@ class _ModeCapability(_Capability):
     """
 
     type = CAPABILITIES_MODE
+    internal_modes: Tuple[str] = NotImplemented
+
+    @classmethod
+    def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
+        """Determine whether mode capability has an override."""
+        return bool(cls.get_override_config(entity_config))
+
+    @classmethod
+    def get_override_config(cls, entity_config: Dict) -> Optional[Dict[str, Any]]:
+        """Return override entity ID for modes."""
+        modes_config = entity_config.get(CONF_ENTITY_MODES)
+        if modes_config:
+            return modes_config.get(cls.instance)
+
+    def parameters_override(self) -> Dict[str, Any]:
+        override_config = self.get_override_config(self.entity_config)
+
+        return {
+            "instance": self.instance,
+            "modes": [
+                {"value": v}
+                for v in (override_config[CONF_MAPPING].keys() if CONF_MAPPING in override_config
+                          else self.internal_modes)
+            ]
+        }
+
+    def get_value_override(self) -> Optional[Union[str, float, int]]:
+        override_config = self.get_override_config(self.entity_config)
+
+        override_entity_state = self.hass.states.get(override_config[CONF_ENTITY_ID])
+        if override_entity_state:
+            if CONF_MAPPING in override_config:
+                for yandex_mode, states in override_config[CONF_MAPPING]:
+                    if override_entity_state.state in states:
+                        return yandex_mode
+
+            elif override_entity_state.state in self.internal_modes:
+                return override_entity_state.state
+
+            raise SmartHomeError(
+                ERR_INTERNAL_ERROR,
+                msg='Mapping for state "%s" unavailable for entity "%s"'
+                    % (override_entity_state.state, override_entity_state.entity_id)
+            )
+
+        return self.internal_modes[0]
+
+    async def set_state_override(self, data: 'RequestData', state: Dict):
+        override_config = self.get_override_config(self.entity_config)
+        value = state['value']
+
+        if CONF_MAPPING in override_config:
+            if value not in override_config:
+                raise SmartHomeError(ERR_INVALID_VALUE, msg="Unsupported mode")
+            value = override_config[value][0]
+
+        script_object = Script(self.hass, override_config[CONF_SET_SCRIPT])
+
+        await script_object.async_run({'value': value}, context=data.context)
+
+
+class _NumericModeCapability(_ModeCapability):
+    internal_modes = MODES_NUMERIC
+    custom_source = NotImplemented
+
+    attr_list: Optional[str] = None
+    attr_value: Optional[str] = None
+    set_service: Optional[str] = None
+
+    def get_numeric_state(self):
+        """Return the state value of this capability for this entity."""
+        program = self.state.attributes.get(self.attr_value)
+        custom_programs = self.entity_config.get(self.custom_source)
+
+        if custom_programs is None:
+            program_list = self.state.attributes.get(self.attr_list, [])
+            iterator = zip(self.internal_modes, program_list)
+
+        else:
+            iterator = custom_programs.items()
+
+        for yandex_program, local_program in iterator:
+            if local_program == program:
+                return yandex_program
+
+        return self.internal_modes[0]
+
+    def parameters_default(self) -> Dict[str, Any]:
+        custom_values = self.entity_config.get(self.custom_source)
+
+        if custom_values is None:
+            program_list = self.state.attributes.get(self.attr_list, [])
+            modes = [
+                {"value": self.internal_modes[i]}
+                for i in range(0, min(len(program_list), 10))
+            ]
+
+        else:
+            modes = [
+                {"value": v}
+                for v in custom_values.keys()
+            ]
+
+        return {
+            "instance": self.instance,
+            "modes": modes,
+        }
+
+    async def set_state_default(self, data: 'RequestData', state: Dict[str, Any]):
+        new_mode = state["value"]
+        custom_programs = self.entity_config.get(self.custom_source)
+
+        if custom_programs is None:
+            program_list = self.state.attributes.get(self.attr_list, [])
+            iterator = zip(self.internal_modes, program_list)
+
+        else:
+            iterator = custom_programs.items()
+
+        for yandex_mode, local_mode in iterator:
+            if yandex_mode == new_mode:
+                return await self.hass.services.async_call(
+                    self.state.domain,
+                    self.set_service, {
+                        ATTR_ENTITY_ID: self.state.entity_id,
+                        self.attr_value: local_mode,
+                    }, blocking=True, context=data.context)
+
+        raise SmartHomeError(ERR_INVALID_VALUE, "Unacceptable value")
 
 
 @register_capability
-class ProgramCapability(_ModeCapability):
+class ProgramCapability(_NumericModeCapability):
     """Program functionality."""
+
     instance = "program"
+    custom_source = CONF_PROGRAMS
 
     program_attributes = {
         (climate.DOMAIN, climate.SUPPORT_PRESET_MODE): (
@@ -528,6 +673,13 @@ class ProgramCapability(_ModeCapability):
         ),
     }
 
+    @classmethod
+    def _get_program_attributes(cls, domain: str, features: int):
+        for (supp_domain, feature), attributes in cls.program_attributes.items():
+            if domain == supp_domain and features & feature:
+                return attributes
+        return None
+
     def __init__(self, hass: HomeAssistantType, state: State, entity_config):
         super().__init__(hass, state, entity_config)
 
@@ -537,83 +689,32 @@ class ProgramCapability(_ModeCapability):
         )
 
         if attributes:
-            self._attr_list = attributes[0]
-            self._attr_value = attributes[1]
-            self._set_service = attributes[2]
-        else:
-            self._attr_list = None
-            self._attr_value = None
-            self._set_service = None
-
-
-    @classmethod
-    def _get_program_attributes(cls, domain: str, features: int):
-        for (supp_domain, feature), attributes in cls.program_attributes.items():
-            if domain == supp_domain and features & feature:
-                return attributes
-        return None
+            self.attr_list = attributes[0]
+            self.attr_value = attributes[1]
+            self.set_service = attributes[2]
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         return bool(cls._get_program_attributes(domain, features))
 
-    def parameters(self):
-        custom_programs = self.entity_config.get(CONF_PROGRAMS)
-        if isinstance(custom_programs, dict):
-            modes = [
-                {"value": v}
-                for v in custom_programs.keys()
-            ]
-        else:
-            program_list = self.state.attributes.get(self._attr_list, [])
-            modes = [
-                {"value": MODES_NUMERIC[i]}
-                for i in range(0, min(len(program_list), 10))
-            ]
 
-        return {
-            "instance": self.instance,
-            "modes": modes,
-        }
+@register_capability
+class InputSourceCapability(_NumericModeCapability):
+    """Input Source functionality"""
 
-    def get_value_default(self) -> Any:
-        """Return the state value of this capability for this entity."""
-        program = self.state.attributes.get(self._attr_value)
-        custom_programs = self.entity_config.get(CONF_PROGRAMS)
+    instance = "input_source"
+    custom_source = CONF_INPUT_SOURCES
 
-        if isinstance(custom_programs, dict):
-            iterator = custom_programs.items()
-        else:
-            program_list = self.state.attributes.get(self._attr_list, [])
-            iterator = zip(MODES_NUMERIC, program_list)
+    attr_list = media_player.ATTR_INPUT_SOURCE_LIST
+    attr_value = media_player.ATTR_INPUT_SOURCE
+    set_service = media_player.SERVICE_SELECT_SOURCE
 
-        for yandex_program, local_program in iterator:
-            if local_program == program:
-                return yandex_program
-
-        return MODES_NUMERIC[0]
-
-    async def set_state(self, data: 'RequestData', state: Dict):
-        """Set device state."""
-        new_program = state["value"]
-        custom_programs = self.entity_config.get(CONF_PROGRAMS)
-
-        if isinstance(custom_programs, dict):
-            iterator = custom_programs.items()
-        else:
-            program_list = self.state.attributes.get(self._attr_list, [])
-            iterator = zip(MODES_NUMERIC, program_list)
-        
-        for yandex_program, local_program in iterator:
-            if yandex_program == new_program:
-                return await self.hass.services.async_call(
-                    self.state.domain,
-                    self._set_service, {
-                        ATTR_ENTITY_ID: self.state.entity_id,
-                        self._attr_value: local_program,
-                    }, blocking=True, context=data.context)
-
-        raise SmartHomeError(ERR_INVALID_VALUE, "Unacceptable value")
+    @classmethod
+    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        """Test if state is supported."""
+        return domain == media_player.DOMAIN \
+               and features & media_player.SUPPORT_SELECT_SOURCE \
+               and attributes.get(media_player.ATTR_INPUT_SOURCE_LIST) is not None
 
 
 @register_capability
@@ -621,13 +722,14 @@ class ThermostatCapability(_ModeCapability):
     """Thermostat functionality"""
 
     instance = 'thermostat'
+    internal_modes = ('auto', 'cool', 'dry', 'fan_only', 'heat', 'preheat')
 
     climate_map = {
-        climate.const.HVAC_MODE_HEAT: 'heat',
-        climate.const.HVAC_MODE_COOL: 'cool',
-        climate.const.HVAC_MODE_AUTO: 'auto',
-        climate.const.HVAC_MODE_DRY: 'dry',
-        climate.const.HVAC_MODE_FAN_ONLY: 'fan_only'
+        climate.const.HVAC_MODE_AUTO: internal_modes[0],
+        climate.const.HVAC_MODE_COOL: internal_modes[1],
+        climate.const.HVAC_MODE_DRY: internal_modes[2],
+        climate.const.HVAC_MODE_FAN_ONLY: internal_modes[3],
+        climate.const.HVAC_MODE_HEAT: internal_modes[4],
     }
 
     @classmethod
@@ -640,7 +742,7 @@ class ThermostatCapability(_ModeCapability):
                     return True
         return False
 
-    def parameters(self):
+    def parameters_default(self) -> Dict[str, Any]:
         """Return parameters for a devices request."""
         operation_list = self.state.attributes.get(climate.ATTR_HVAC_MODES)
         modes = []
@@ -653,7 +755,7 @@ class ThermostatCapability(_ModeCapability):
             'modes': modes,
         }
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         operation = self.state.attributes.get(climate.ATTR_HVAC_MODE)
 
@@ -687,89 +789,17 @@ class ThermostatCapability(_ModeCapability):
 
 
 @register_capability
-class InputSourceCapability(_ModeCapability):
-    """Input Source functionality"""
-
-    instance = "input_source"
-
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        """Test if state is supported."""
-        return domain == media_player.DOMAIN \
-            and features & media_player.SUPPORT_SELECT_SOURCE \
-            and attributes.get(media_player.ATTR_INPUT_SOURCE_LIST) is not None
-
-    def parameters(self):
-        """Return parameters for a devices request."""
-        custom_input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
-        if isinstance(custom_input_sources, dict):
-            modes = [
-                {"value": v}
-                for v in custom_input_sources.keys()
-            ]
-        else:
-            source_list = self.state.attributes.get(media_player.ATTR_INPUT_SOURCE_LIST, [])
-            modes = [
-                {"value": MODES_NUMERIC[i]}
-                for i in range(0, min(len(source_list), 10))
-            ]
-
-        return {
-            "instance": self.instance,
-            "modes": modes,
-        }
-
-    def get_value_default(self) -> Any:
-        """Return the state value of this capability for this entity."""
-        source = self.state.attributes.get(media_player.ATTR_INPUT_SOURCE)
-        custom_input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
-
-        if isinstance(custom_input_sources, dict):
-            iterator = custom_input_sources.items()
-        else:
-            source_list = self.state.attributes.get(media_player.ATTR_INPUT_SOURCE_LIST, [])
-            iterator = zip(MODES_NUMERIC, source_list)
-
-        for yandex_source, local_source in iterator:
-            if local_source == source:
-                return yandex_source
-
-        return MODES_NUMERIC[0]
-
-    async def set_state(self, data: 'RequestData', state: Dict):
-        """Set device state."""
-        new_source = state["value"]
-        custom_input_sources = self.entity_config.get(CONF_INPUT_SOURCES)
-
-        if isinstance(custom_input_sources, dict):
-            iterator = custom_input_sources.items()
-        else:
-            source_list = self.state.attributes.get(media_player.ATTR_INPUT_SOURCE_LIST, [])
-            iterator = zip(MODES_NUMERIC, source_list)
-        
-        for yandex_source, local_source in iterator:
-            if yandex_source == new_source:
-                return await self.hass.services.async_call(
-                    media_player.DOMAIN,
-                    media_player.SERVICE_SELECT_SOURCE, {
-                        ATTR_ENTITY_ID: self.state.entity_id,
-                        media_player.ATTR_INPUT_SOURCE: local_source,
-                    }, blocking=True, context=data.context)
-
-        raise SmartHomeError(ERR_INVALID_VALUE, "Unacceptable value")
-
-
-@register_capability
 class FanSpeedCapability(_ModeCapability):
     """Fan speed functionality."""
 
     instance = 'fan_speed'
+    internal_modes = ("auto", "low", "medium", "high", "turbo")
 
     values = {
-        'auto': ['auto'],
-        'low': ['low', 'min', 'silent'],
-        'medium': ['medium', 'middle'],
-        'high': ['high', 'max', 'strong', 'favorite'],
+        internal_modes[0]: ['auto'],
+        internal_modes[1]: ['low', 'min', 'silent'],
+        internal_modes[2]: ['medium', 'middle'],
+        internal_modes[3]: ['high', 'max', 'strong', 'favorite'],
     }
 
     @classmethod
@@ -781,7 +811,7 @@ class FanSpeedCapability(_ModeCapability):
             return features & fan.SUPPORT_SET_SPEED
         return False
 
-    def parameters(self):
+    def parameters_default(self) -> Dict[str, Any]:
         """Return parameters for a devices request."""
         if self.state.domain == climate.DOMAIN:
             speed_list = self.state.attributes.get(climate.ATTR_FAN_MODES)
@@ -826,7 +856,7 @@ class FanSpeedCapability(_ModeCapability):
                         return ha_value
         return None
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         if self.state.domain == climate.DOMAIN:
             ha_value = self.state.attributes.get(climate.ATTR_FAN_MODE)
@@ -866,18 +896,22 @@ class FanSpeedCapability(_ModeCapability):
             }, blocking=True, context=data.context)
 
 
-# @register_capability
-# class CleanupModeCapability(_ModeCapability):
-#
-#    instance = "cleanup_mode"
-#
-#    supported_modes = {
-#        "auto",
-#        "eco",
-#        "express",
-#        "normal",
-#        "quiet"
-#    }
+@register_capability
+class CleanupModeCapability(_ModeCapability):
+    """Cleanup mode functionality."""
+
+    instance = "cleanup_mode"
+    internal_modes = (
+        "auto",
+        "eco",
+        "express",
+        "normal",
+        "quiet"
+    )
+
+    @classmethod
+    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        return False
 
 
 @register_capability
@@ -898,7 +932,7 @@ class SwingCapability(_ModeCapability):
         return domain == climate.DOMAIN and \
             features & climate.SUPPORT_SWING_MODE
 
-    def parameters(self):
+    def parameters_default(self) -> Dict[str, Any]:
         """Return parameters for a devices request."""
         swing_modes = self.state.attributes.get(climate.const.ATTR_SWING_MODES)
         modes = []
@@ -911,7 +945,7 @@ class SwingCapability(_ModeCapability):
             'modes': modes,
         }
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         return self.modes_swing.get(
             self.state.attributes(climate.const.ATTR_SWING_MODE),
             climate.const.SWING_OFF
@@ -939,12 +973,85 @@ class _RangeCapability(_Capability):
     """
 
     type = CAPABILITIES_RANGE
+    unit: Optional[str] = NotImplemented
+    retrievable = True
 
+    @property
+    def min_max_precision(self) -> Optional[Tuple[Union[int, float], Union[int, float], Union[int, float]]]:
+        return None
 
-ATTR_TARGET_HUMIDITY = "target_humidity"
-ATTR_CURRENT_HUMIDITY = "current_humidity"
-ATTR_HUMIDITY_STEP = "humidity_step"
-SERVICE_PARAMS = "service_config"
+    @property
+    def random_access(self) -> bool:
+        return True
+
+    @classmethod
+    def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
+        """Determine whether mode capability has an override."""
+        return bool(cls.get_override_config(entity_config))
+
+    @classmethod
+    def get_override_config(cls, entity_config: Dict) -> Optional[Dict[str, Any]]:
+        """Return override entity ID for modes."""
+        modes_config = entity_config.get(CONF_ENTITY_RANGES)
+        if modes_config:
+            return modes_config.get(cls.instance)
+
+    def parameters_default(self) -> Dict[str, Any]:
+        """Return parameters for a devices request."""
+        parameters = {
+            "instance": self.instance,
+            "random_access": self.random_access,
+        }
+
+        min_max_precision = self.min_max_precision
+        if min_max_precision is not None:
+            parameters['range'] = dict(zip(['min', 'max', 'precision'], min_max_precision))
+
+        if self.unit is not None:
+            parameters['unit'] = self.unit
+
+        return parameters
+
+    def parameters_override(self) -> Dict[str, Any]:
+        override_config = self.get_override_config(self.entity_config)
+
+        parameters = {
+            "instance": self.instance,
+            "random_access": True,
+            "range": {
+                "max": override_config[CONF_MAXIMUM],
+                "min": override_config[CONF_MINIMUM],
+                "precision": override_config[CONF_PRECISION],
+            }
+        }
+
+        if self.unit:
+            parameters['unit'] = self.unit
+
+        return parameters
+
+    def get_value_override(self) -> Optional[Union[str, float, int]]:
+        override_config = self.get_override_config(self.entity_config)
+
+        override_entity_state = self.hass.states.get(override_config[CONF_ENTITY_ID])
+        if override_entity_state:
+            try:
+                source_state = float(override_entity_state)
+
+            except ValueError:
+                source_state = 0
+
+            value = source_state / override_config[CONF_MULTIPLIER]
+
+            return min(override_config[CONF_MAXIMUM], max(override_config[CONF_MINIMUM], value))
+
+        return override_config[CONF_MINIMUM]
+
+    async def set_state_override(self, data: 'RequestData', state: Dict):
+        override_config = self.get_override_config(self.entity_config)
+        value = float(state['value']) * override_config[CONF_MULTIPLIER]
+        script_object = Script(self.hass, override_config[CONF_SET_SCRIPT])
+        await script_object.async_run({'value': value}, context=data.context)
 
 
 @register_capability
@@ -952,73 +1059,84 @@ class HumidityCapability(_RangeCapability):
     """Set humidity functionality."""
 
     instance = 'humidity'
+    unit = "unit.percent"
+
+    ATTR_TARGET_HUMIDITY = "target_humidity"
+    ATTR_CURRENT_HUMIDITY = "current_humidity"
+    ATTR_HUMIDITY_STEP = "humidity_step"
+    ATTR_SERVICE_SET_HUMIDITY = "set_humidity"
+    ATTR_MIN_HUMIDITY = "min_humidity"
+    ATTR_MAX_HUMIDITY = "max_humidity"
+    SERVICE_PARAMS = "service_config"
 
     supported_humidifiers = {
-        # this domain is officially supported
-        climate.DOMAIN: {
-            climate.ATTR_HUMIDITY: climate.ATTR_HUMIDITY,
-            climate.ATTR_CURRENT_HUMIDITY: climate.ATTR_CURRENT_HUMIDITY,
-            climate.SERVICE_SET_HUMIDITY: (climate.DOMAIN, climate.SERVICE_SET_HUMIDITY),
-            climate.ATTR_MIN_HUMIDITY: climate.ATTR_MIN_HUMIDITY,
-            climate.ATTR_MAX_HUMIDITY: climate.ATTR_MAX_HUMIDITY,
-            ATTR_HUMIDITY_STEP: 1,
-            SERVICE_PARAMS: lambda humidity: {climate.ATTR_HUMIDITY: humidity}
-        },
+        climate.DOMAIN: [
+            {  # Default entity support
+                ATTR_TARGET_HUMIDITY: climate.ATTR_HUMIDITY,
+                ATTR_CURRENT_HUMIDITY: climate.ATTR_CURRENT_HUMIDITY,
+                ATTR_SERVICE_SET_HUMIDITY: (climate.DOMAIN, climate.SERVICE_SET_HUMIDITY),
+                ATTR_MIN_HUMIDITY: climate.ATTR_MIN_HUMIDITY,
+                ATTR_MAX_HUMIDITY: climate.ATTR_MAX_HUMIDITY,
+                ATTR_HUMIDITY_STEP: 1,
+                SERVICE_PARAMS: lambda humidity: {climate.ATTR_HUMIDITY: humidity}
+            }
+        ],
     }
 
     def __init__(self, hass: HomeAssistantType, state: State, entity_config):
         super().__init__(hass, state, entity_config)
 
-        domain, attributes = self._get_access_parameters(state.domain, state.attributes)
+        parameters = self._get_access_parameters(state.domain, state.attributes)
+        if parameters is None:
+            raise ValueError('Unsupported entity state')
+
+        domain, attributes = parameters
         self._service_domain = domain
         self._attrs = attributes
 
-    def _get_attribute_or_hard_setting(self, attr):
-        return self.state.attributes.get(self._attrs[attr]) \
-            if isinstance(self._attrs[attr], str) \
-            else self._attrs[attr]
-
     @classmethod
-    def _get_access_parameters(cls, domain: str, attributes: str) -> Optional[dict]:
-        if domain == climate.DOMAIN:
-            return cls.supported_humidifiers[climate.DOMAIN]
-
+    def _get_access_parameters(cls, domain: str, attributes: Dict[str, Any]) -> Optional[dict]:
         access_parameters = cls.supported_humidifiers.get(domain)
         if access_parameters:
-            for attr_config in access_parameters.values():
-                if (
-                        attr_config[ATTR_CURRENT_HUMIDITY] in attributes and
-                        attr_config[ATTR_TARGET_HUMIDITY] in attributes
-                ):
+            for attr_config in access_parameters:
+                if all([attr_config[a] in attributes for a in [cls.ATTR_CURRENT_HUMIDITY, cls.ATTR_TARGET_HUMIDITY]]):
                     return attr_config
-        return None
 
-    def parameters(self) -> dict:
-        return {
-            "instance": self.instance,
-            "random_access": True,
-            "range": {
-                "max": self._get_attribute_or_hard_setting(climate.ATTR_MAX_HUMIDITY),
-                "min": self._get_attribute_or_hard_setting(climate.ATTR_MIN_HUMIDITY),
-                "precision": self._get_attribute_or_hard_setting(ATTR_HUMIDITY_STEP),
-            },
-            "unit": "unit.percent"
-        }
+    def _get_entity_attribute(self, attribute_type: str):
+        """
+        Get attribute from skimmed entity attributes.
+        :param attribute_type: Attribute from supported attributes
+        :return:
+        """
+        return self.state.attributes.get(self._attrs[attribute_type])
+
+    @property
+    def min_max_precision(self) -> Tuple[Union[int, float], Union[int, float], Union[int, float]]:
+        """Return min / max / precision values."""
+        return (
+            self._get_entity_attribute(self.ATTR_MIN_HUMIDITY),
+            self._get_entity_attribute(self.ATTR_MAX_HUMIDITY),
+            self._get_entity_attribute(self.ATTR_HUMIDITY_STEP)
+        )
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        if domain == climate.DOMAIN:
-            return features & climate.SUPPORT_TARGET_HUMIDITY
-
+        """Test if state is supported."""
         return bool(cls._get_access_parameters(domain, attributes))
 
-    def get_value_default(self) -> Any:
-        return self.state.attributes.get(self._attrs[climate.ATTR_CURRENT_HUMIDITY])
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
+        return self._get_entity_attribute(self.ATTR_CURRENT_HUMIDITY)
 
-    async def set_state(self, data: 'RequestData', state: dict) -> None:
+    async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
+        """
+        Set target humidity (default variant).
+        :param data: Request data
+        :param state: Requested state
+        """
         domain, service = self._attrs[climate.SERVICE_SET_HUMIDITY]
+
         service_params = {ATTR_ENTITY_ID: self.state.entity_id}
-        service_params.update(self._attrs[SERVICE_PARAMS](state['value']))
+        service_params.update(self._attrs[self.SERVICE_PARAMS](state['value']))
 
         self.hass.services.async_call(domain, service, service_params, blocking=True, context=data.context)
 
@@ -1028,18 +1146,21 @@ class TemperatureCapability(_RangeCapability):
     """Set temperature functionality."""
 
     instance = 'temperature'
+    unit = "unit.temperature.celsius"
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
         if domain == water_heater.DOMAIN:
             return features & water_heater.SUPPORT_TARGET_TEMPERATURE
+
         elif domain == climate.DOMAIN:
             return features & climate.const.SUPPORT_TARGET_TEMPERATURE
+
         return False
 
-    def parameters(self):
-        """Return parameters for a devices request."""
+    @property
+    def min_max_precision(self):
         if self.state.domain == water_heater.DOMAIN:
             min_temp = self.state.attributes.get(water_heater.ATTR_MIN_TEMP)
             max_temp = self.state.attributes.get(water_heater.ATTR_MAX_TEMP)
@@ -1049,45 +1170,42 @@ class TemperatureCapability(_RangeCapability):
         else:
             min_temp = 0
             max_temp = 100
-        return {
-            "instance": self.instance,
-            "unit": "unit.temperature.celsius",
-            "range": {
-                "min": min_temp,
-                "max": max_temp,
-                "precision": 0.5
-            }
-        }
 
-    def get_value_default(self) -> Any:
+        return min_temp, max_temp, 0.5
+
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         temperature = None
         if self.state.domain == water_heater.DOMAIN:
             temperature = self.state.attributes.get(water_heater.ATTR_TEMPERATURE)
+
         elif self.state.domain == climate.DOMAIN:
             temperature = self.state.attributes.get(climate.ATTR_TEMPERATURE)
+
         if temperature is None:
             return 0
-        else:
-            return float(temperature)
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+        return float(temperature)
+
+    async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
 
         if self.state.domain == water_heater.DOMAIN:
             service = water_heater.SERVICE_SET_TEMPERATURE
             attr = water_heater.ATTR_TEMPERATURE
+
         elif self.state.domain == climate.DOMAIN:
             service = climate.SERVICE_SET_TEMPERATURE
             attr = climate.ATTR_TEMPERATURE
+
         else:
             raise SmartHomeError(ERR_INVALID_VALUE, "Unsupported domain")
 
         await self.hass.services.async_call(
-            climate.DOMAIN,
-            climate.SERVICE_SET_TEMPERATURE, {
+            self.state.domain,
+            service, {
                 ATTR_ENTITY_ID: self.state.entity_id,
-                climate.ATTR_TEMPERATURE: state['value']
+                attr: state['value']
             }, blocking=True, context=data.context)
 
 
@@ -1096,34 +1214,27 @@ class BrightnessCapability(_RangeCapability):
     """Set brightness functionality."""
 
     instance = 'brightness'
+    unit = "unit.percent"
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
         return domain == light.DOMAIN and \
-            features & light.SUPPORT_BRIGHTNESS
+               features & light.SUPPORT_BRIGHTNESS
 
-    def parameters(self):
-        """Return parameters for a devices request."""
-        return {
-            "instance": self.instance,
-            "unit": "unit.percent",
-            "range": {
-                "min": 0,
-                "max": 100,
-                "precision": 1
-            }
-        }
+    @property
+    def min_max_precision(self) -> Tuple[Union[int, float], Union[int, float], Union[int, float]]:
+        return 0, 100, 1
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         brightness = self.state.attributes.get(light.ATTR_BRIGHTNESS)
         if brightness is None:
             return 0
-        else:
-            return int(100 * (brightness / 255))
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+        return int(100 * (brightness / 255))
+
+    async def set_state_default(self, data: 'RequestData', state: Dict):
         """Set device state."""
         await self.hass.services.async_call(
             light.DOMAIN,
@@ -1138,43 +1249,35 @@ class VolumeCapability(_RangeCapability):
     """Set volume functionality."""
 
     instance = 'volume'
-    retrievable = False
+    unit = None
 
-    def __init__(self, hass, state, config):
-        super().__init__(hass, state, config)
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict[str, Any]):
+        super().__init__(hass, state, entity_config)
         features = self.state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
-        self.retrievable = features & media_player.SUPPORT_VOLUME_SET != 0
+        self.retrievable = (
+                self.has_override(state.domain, entity_config, state.attributes)
+                or features & media_player.SUPPORT_VOLUME_SET != 0
+        )
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
         return domain == media_player.DOMAIN and features & \
-            media_player.SUPPORT_VOLUME_STEP
+               media_player.SUPPORT_VOLUME_STEP
 
-    def parameters(self):
-        """Return parameters for a devices request."""
-        if self.is_relative_volume_only():
-            return {
-                'instance': self.instance
-            }
-        else:
-            return {
-                'instance': self.instance,
-                'random_access': True,
-                'range': {
-                    'max': 100,
-                    'min': 0,
-                    'precision': 1
-                }
-            }
+    @property
+    def random_access(self) -> bool:
+        return not self.is_relative_volume_only()
+
+    @property
+    def min_max_precision(self) -> Tuple[Union[int, float], Union[int, float], Union[int, float]]:
+        return None if self.is_relative_volume_only() else (0, 100, 1)
 
     def is_relative_volume_only(self):
-        _LOGGER.debug("CONF_RELATIVE_VOLUME_ONLY: %r" % self.entity_config.get(
-            CONF_RELATIVE_VOLUME_ONLY))
         return not self.retrievable or self.entity_config.get(
             CONF_RELATIVE_VOLUME_ONLY)
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         level = self.state.attributes.get(
             media_player.ATTR_MEDIA_VOLUME_LEVEL)
@@ -1183,7 +1286,7 @@ class VolumeCapability(_RangeCapability):
         else:
             return int(level * 100)
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict):
         """Set device state."""
         if self.is_relative_volume_only():
             if state['value'] > 0:
@@ -1210,6 +1313,7 @@ class ChannelCapability(_RangeCapability):
     """Set channel functionality."""
 
     instance = 'channel'
+    unit = None
 
     script_channel_up = None
     script_channel_down = None
@@ -1241,39 +1345,32 @@ class ChannelCapability(_RangeCapability):
 
         return False
 
-    def parameters(self):
-        """Return parameters for a devices request."""
-        if self.retrievable:
-            return {
-                'instance': self.instance,
-                'random_access': True,
-                'range': {
-                    'max': 999,
-                    'min': 0,
-                    'precision': 1
-                }
-            }
-        else:
-            return {
-                'instance': self.instance,
-                'random_access': False
-            }
+    @property
+    def min_max_precision(self) -> Optional[Tuple[Union[int, float], Union[int, float], Union[int, float]]]:
+        return (0, 999, 1) if self.retrievable else None
 
-    def get_value_default(self) -> Any:
+    @property
+    def random_access(self) -> bool:
+        return self.retrievable
+
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         if not self.retrievable or self.state.attributes.get(
                 media_player.ATTR_MEDIA_CONTENT_TYPE) \
                 != media_player.const.MEDIA_TYPE_CHANNEL:
             return 0
+
         try:
             return int(self.state.attributes.get(
                 media_player.ATTR_MEDIA_CONTENT_ID))
+
         except ValueError:
             return 0
+
         except TypeError:
             return 0
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict):
         """Set device state."""
         if 'relative' in state and state['relative']:
             if state['value'] > 0:
@@ -1309,27 +1406,25 @@ class ChannelCapability(_RangeCapability):
 @register_capability
 class OpenCapability(_RangeCapability):
     instance = "open"
+    unit = None
 
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         if domain == cover.DOMAIN:
             return features & cover.SUPPORT_SET_POSITION
         return False
-    
-    def parameters(self):
-        return {
-            'instance': self.instance,
-            'random_access': True,
-            'range': {
-                'max': 100,
-                'min': 0,
-                'precision': 1
-            }
-        }
 
-    def get_value_default(self) -> int:
+    @property
+    def min_max_precision(self) -> Optional[Tuple[Union[int, float], Union[int, float], Union[int, float]]]:
+        return 0, 100, 1
+
+    @property
+    def random_access(self) -> bool:
+        return True
+
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         return self.state.attributes.get(cover.ATTR_CURRENT_POSITION)
-    
+
     async def set_state_default(self, data: 'RequestData', state: Dict):
         await self.hass.services.async_call(
             cover.DOMAIN,
@@ -1337,7 +1432,7 @@ class OpenCapability(_RangeCapability):
                 ATTR_ENTITY_ID: self.state.entity_id,
                 cover.ATTR_POSITION: state['value']
             }, blocking=True, context=data.context)
-            
+
 
 class _ColorSettingCapability(_Capability):
     """Base color setting functionality.
@@ -1347,7 +1442,7 @@ class _ColorSettingCapability(_Capability):
 
     type = CAPABILITIES_COLOR_SETTING
 
-    def parameters(self):
+    def parameters_default(self):
         """Return parameters for a devices request."""
         result = {}
 
@@ -1366,6 +1461,10 @@ class _ColorSettingCapability(_Capability):
 
         return result
 
+    @classmethod
+    def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
+        return False
+
 
 @register_capability
 class RgbCapability(_ColorSettingCapability):
@@ -1378,7 +1477,7 @@ class RgbCapability(_ColorSettingCapability):
         """Test if state is supported."""
         return domain == light.DOMAIN and features & light.SUPPORT_COLOR
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         color = self.state.attributes.get(light.ATTR_RGB_COLOR)
         if color is None:
@@ -1415,7 +1514,7 @@ class TemperatureKCapability(_ColorSettingCapability):
         """Test if state is supported."""
         return domain == light.DOMAIN and features & light.SUPPORT_COLOR_TEMP
 
-    def get_value_default(self) -> Any:
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         kelvin = self.state.attributes.get(light.ATTR_COLOR_TEMP)
         if kelvin is None:

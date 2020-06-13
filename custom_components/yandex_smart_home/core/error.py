@@ -1,7 +1,19 @@
 """Errors for Yandex Smart Home."""
 
 
-class SmartHomeError(Exception):
+class SmartHomeException(Exception):
+    pass
+
+
+class DefaultNotImplemented(SmartHomeException):
+    pass
+
+
+class OverrideNotImplemented(SmartHomeException):
+    pass
+
+
+class SmartHomeError(SmartHomeException):
     """Yandex Smart Home errors.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/response-codes-docpage/

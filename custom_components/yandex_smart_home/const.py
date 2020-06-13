@@ -1,25 +1,30 @@
 """Constants for Yandex Smart Home."""
 DOMAIN = 'yandex_smart_home'
 
-DATA_YANDEX_SMART_HOME_CONFIG = DOMAIN + "_config"
+DATA_CONFIG = DOMAIN + "_config"
 
 CONF_ENTITY_CONFIG = 'entity_config'
 CONF_FILTER = 'filter'
 CONF_ROOM = 'room'
 CONF_TYPE = 'type'
-CONF_ENTITY_PROPERTY_ENTITY = 'entity'
 CONF_ENTITY_PROPERTY_TYPE = 'type'
-CONF_ENTITY_PROPERTY_ATTRIBUTE = 'attribute'
+CONF_ATTRIBUTE = 'attribute'
 CONF_ENTITY_PROPERTIES = 'properties'
+CONF_ENTITY_MODES = 'modes'
+CONF_ENTITY_RANGES = "ranges"
 CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID = 'channel_set_via_media_content_id'
 CONF_RELATIVE_VOLUME_ONLY = 'relative_volume_only'
-CONF_INPUT_SOURCES = 'sources'                         # <-- do not change this until a major release
+CONF_INPUT_SOURCES = 'sources'  # <-- do not change this until a major release
 CONF_CONTROLS_SWITCH = 'controls_switch'
 CONF_SCRIPT_CHANNEL_UP = 'channel_up'
 CONF_SCRIPT_CHANNEL_DOWN = 'channel_down'
 CONF_ENTITY_TOGGLES = 'toggles'
 CONF_PROGRAMS = "programs"
 CONF_DIAGNOSTICS_MODE = "diagnostics_mode"
+CONF_MAPPING = 'mapping'
+CONF_SET_SCRIPT = 'set_script'
+CONF_MULTIPLIER = 'multiplier'
+CONF_PRECISION = 'precision'
 
 # Attributes for Yandex statistics sensor
 ATTR_LAST_ACTION_TIME = "last_command_time"
@@ -47,8 +52,8 @@ TYPE_MEDIA_DEVICE_TV = PREFIX_TYPES + 'media_device.tv'
 TYPE_MEDIA_DEVICE_TV_BOX = PREFIX_TYPES + 'media_device.tv_box'
 TYPE_MEDIA_DEVICE_RECEIVER = PREFIX_TYPES + 'media_device.receiver'
 TYPE_COOKING = PREFIX_TYPES + 'cooking'
-TYPE_COOKING_KETTLE = PREFIX_TYPES + 'cooking.kettle'
 TYPE_COOKING_COFFEE_MAKER = PREFIX_TYPES + 'cooking.coffee_maker'
+TYPE_COOKING_KETTLE = PREFIX_TYPES + 'cooking.kettle'
 TYPE_OPENABLE = PREFIX_TYPES + 'openable'
 TYPE_OPENABLE_CURTAIN = PREFIX_TYPES + 'openable.curtain'
 TYPE_HUMIDIFIER = PREFIX_TYPES + 'humidifier'

@@ -3,35 +3,35 @@ import logging
 from datetime import datetime
 
 from homeassistant.const import CLOUD_NEVER_EXPOSED_ENTITIES
+from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.util.decorator import Registry
-from .const import (
-	DOMAIN,
+
+from custom_components.yandex_smart_home.const import (
     ERR_INTERNAL_ERROR, ERR_DEVICE_UNREACHABLE,
-    ERR_DEVICE_NOT_FOUND
+    ERR_DEVICE_NOT_FOUND, ATTR_YANDEX_TYPE
 )
-from .error import SmartHomeError
-from .helpers import RequestData, YandexEntity
+from custom_components.yandex_smart_home.core.error import SmartHomeError
+from custom_components.yandex_smart_home.core.helpers import RequestData, YandexEntity
 
 HANDLERS = Registry()
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_handle_message(hass, config, user_id, request_id, action,
+async def async_handle_message(hass: HomeAssistantType, config, user_id, request_id, action,
                                message):
     """Handle incoming API messages."""
     data = RequestData(config, user_id, request_id)
 
     response = await _process(hass, data, action, message)
 
-    if response and 'payload' in response and 'error_code' in response[
-        'payload']:
+    if response and 'payload' in response and 'error_code' in response['payload']:
         _LOGGER.error('Error handling message %s: %s',
                       message, response['payload'])
 
     return response
 
 
-async def _process(hass, data, action, message):
+async def _process(hass: HomeAssistantType, data: RequestData, action, message):
     """Process a message."""
     handler = HANDLERS.get(action)
 
@@ -41,13 +41,16 @@ async def _process(hass, data, action, message):
             'payload': {'error_code': ERR_INTERNAL_ERROR}
         }
 
+    # noinspection PyBroadException
     try:
         result = await handler(hass, data, message)
+
     except SmartHomeError as err:
         return {
             'request_id': data.request_id,
             'payload': {'error_code': err.code}
         }
+
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception('Unexpected error')
         return {
@@ -58,20 +61,30 @@ async def _process(hass, data, action, message):
     if result is None:
         if data.request_id is None:
             return None
-        else:
-            return {'request_id': data.request_id}
+
+        return {'request_id': data.request_id}
+
     return {'request_id': data.request_id, 'payload': result}
 
 
+# noinspection PyUnusedLocal
 @HANDLERS.register('/user/devices')
-async def async_devices_sync(hass, data, message):
+async def async_devices_sync(hass: HomeAssistantType, data: RequestData, message):
     """Handle /user/devices request.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/reference/get-devices-docpage/
+
+    :param hass: HomeAssistant object
+    :param data: Request data
+    :param message: Message contents
+    :return: Optional response
     """
     devices = []
     for state in hass.states.async_all():
         if state.entity_id in CLOUD_NEVER_EXPOSED_ENTITIES:
+            continue
+
+        if state.attributes.get(ATTR_YANDEX_TYPE) is False:
             continue
 
         if not data.config.should_expose(state.entity_id):
@@ -94,11 +107,17 @@ async def async_devices_sync(hass, data, message):
     return response
 
 
+# noinspection PyUnusedLocal
 @HANDLERS.register('/user/devices/query')
-async def async_devices_query(hass, data, message):
+async def async_devices_query(hass: HomeAssistantType, data: RequestData, message):
     """Handle /user/devices/query request.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/reference/post-devices-query-docpage/
+
+    :param hass: HomeAssistant object
+    :param data: Request data
+    :param message: Message contents
+    :return: Optional response
     """
     devices = []
     for device in message.get('devices', []):
@@ -113,7 +132,7 @@ async def async_devices_query(hass, data, message):
 
         state = hass.states.get(entity_id)
 
-        if not state:
+        if not state or state.attributes.get(ATTR_YANDEX_TYPE) is False:
             # If we can't find a state, the device is unreachable
             devices.append({
                 'id': entity_id,
@@ -131,11 +150,17 @@ async def async_devices_query(hass, data, message):
     return {'devices': devices}
 
 
+# noinspection PyUnusedLocal
 @HANDLERS.register('/user/devices/action')
-async def handle_devices_execute(hass, data, message):
+async def handle_devices_execute(hass: HomeAssistantType, data: RequestData, message):
     """Handle /user/devices/action request.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/reference/post-action-docpage/
+
+    :param hass: HomeAssistant object
+    :param data: Request data
+    :param message: Message contents
+    :return: Optional response
     """
     entities = {}
     devices = {}
@@ -225,10 +250,16 @@ async def handle_devices_execute(hass, data, message):
     return {'devices': final_results}
 
 
+# noinspection PyUnusedLocal
 @HANDLERS.register('/user/unlink')
-async def async_devices_disconnect(hass, data, message):
+async def async_devices_disconnect(hass: HomeAssistantType, data: 'RequestData', message):
     """Handle /user/unlink request.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/reference/unlink-docpage/
+
+    :param hass: HomeAssistant object
+    :param data: Request data
+    :param message: Message contents
+    :return: Optional response
     """
     return None

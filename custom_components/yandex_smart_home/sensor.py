@@ -1,21 +1,24 @@
 from typing import Optional, Dict, Any, Union, TYPE_CHECKING
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OK
 from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.typing import HomeAssistantType
 
 from .const import (
     DOMAIN,
     ATTR_LAST_SYNC_TIME,
     ATTR_LAST_ACTION_TIME,
     ATTR_LAST_ACTION_TARGETS,
-    ATTR_SYNCED_DEVICES_COUNT
+    ATTR_SYNCED_DEVICES_COUNT, ATTR_YANDEX_TYPE
 )
 
 if TYPE_CHECKING:
     from datetime import datetime
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+# noinspection PyUnusedLocal
+async def async_setup_entry(hass: HomeAssistantType, entry: ConfigEntry, async_add_entities):
     """Add Yandex statistics sensor."""
     async_add_entities(
         [YandexStatisticsSensor()],
@@ -75,6 +78,7 @@ class YandexStatisticsSensor(Entity):
             ATTR_LAST_ACTION_TIME: self._last_action_time,
             ATTR_LAST_ACTION_TARGETS: self._last_action_targets,
             ATTR_SYNCED_DEVICES_COUNT: self._synced_devices_count,
+            ATTR_YANDEX_TYPE: False,
         }
 
     @property

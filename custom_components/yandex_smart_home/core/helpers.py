@@ -2,28 +2,57 @@
 import logging
 from asyncio import gather
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Type, List, Optional, Union
 
 from homeassistant.const import (
-    CONF_NAME, STATE_UNAVAILABLE, ATTR_SUPPORTED_FEATURES,
-    ATTR_DEVICE_CLASS
+    CONF_NAME, STATE_UNAVAILABLE, ATTR_SUPPORTED_FEATURES
 )
 from homeassistant.core import Context, callback, State
 from homeassistant.helpers.typing import HomeAssistantType
 
-from . import capability, prop
-from .const import (
+from custom_components.yandex_smart_home.const import (
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE, ERR_DEVICE_UNREACHABLE,
-    ERR_INVALID_VALUE, CONF_ROOM, PREFIX_TYPES, CONF_TYPE,
-    CONF_ENTITY_PROPERTIES
+    ERR_INVALID_VALUE, CONF_ROOM, CONF_TYPE
 )
-from .error import SmartHomeError
-from .type_mapper import determine_state_type
+from custom_components.yandex_smart_home.core.error import SmartHomeError
+from custom_components.yandex_smart_home.core.type_mapper import determine_state_type
+from custom_components.yandex_smart_home.functions import prop, capability
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+CapabilityType = 'capability._Capability'
+PropertyType = 'prop._Property'
+AnyInstanceType = Union[Type[PropertyType], Type[CapabilityType]]
+
+
+def deep_update(target, source):
+    """Update a nested dictionary with another nested dictionary."""
+    for key, value in source.items():
+        if isinstance(value, Mapping):
+            target[key] = deep_update(target.get(key, {}), value)
+        else:
+            target[key] = value
+    return target
+
+
+def get_child_instances(source: List[AnyInstanceType], _type: Optional[str] = None) -> List[str]:
+    """
+    Get instance list for subclasses of given class.
+    :param _type:
+    :param source:
+    :return:
+    """
+    if _type is None:
+        return [item.instance for item in source]
+
+    return [
+        item.instance
+        for item in source
+        if item.type == _type
+    ]
 
 
 class Config:
@@ -50,13 +79,13 @@ class RequestData:
 class YandexEntity:
     """Adaptation of Entity expressed in Yandex's terms."""
 
-    def __init__(self, hass: HomeAssistantType, config: Dict, state: State):
+    def __init__(self, hass: HomeAssistantType, config: Config, state: State):
         """Initialize a Yandex Smart Home entity."""
         self.hass = hass
         self.config = config
         self.state = state
-        self._capabilities = None
-        self._properties = None
+        self._capabilities: Optional[List[CapabilityType]] = None
+        self._properties: Optional[List[PropertyType]] = None
 
     @property
     def entity_id(self):
@@ -64,23 +93,27 @@ class YandexEntity:
         return self.state.entity_id
 
     @callback
-    def capabilities(self):
-        """Return capabilities for entity."""
-        if self._capabilities is not None:
-            return self._capabilities
-
+    def _generate_support_list(self, from_range: List[AnyInstanceType]):
         state = self.state
         domain = state.domain
         features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
         entity_config = self.config.entity_config.get(state.entity_id, {})
         attributes = state.attributes
 
-        self._capabilities = [
-            Capability(self.hass, state, entity_config)
-            for Capability in capability.CAPABILITIES
-            if Capability.supported(domain, features, entity_config, attributes)
-            or Capability.has_override(domain, entity_config, attributes)
+        return [
+            from_class(self.hass, state, entity_config)
+            for from_class in from_range
+            if from_class.supported(domain, features, entity_config, attributes)
+               or from_class.has_override(domain, entity_config, attributes)
         ]
+
+    @callback
+    def capabilities(self):
+        """Return capabilities for entity."""
+        if self._capabilities is not None:
+            return self._capabilities
+
+        self._capabilities = self._generate_support_list(capability.CAPABILITIES)
 
         return self._capabilities
 
@@ -90,18 +123,7 @@ class YandexEntity:
         if self._properties is not None:
             return self._properties
 
-        state = self.state
-        domain = state.domain
-        features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
-        entity_config = self.config.entity_config.get(state.entity_id, {})
-        attributes = state.attributes
-
-        self._properties = [
-            Property(self.hass, state, entity_config)
-            for Property in prop.PROPERTIES
-            if Property.supported(domain, features, entity_config, attributes)
-            or Property.has_override(domain, entity_config, attributes)
-        ]
+        self._properties = self._generate_support_list(prop.PROPERTIES)
 
         return self._properties
 
@@ -230,7 +252,7 @@ class YandexEntity:
             'properties': properties,
         }
 
-    async def execute(self, data, capability_type, state):
+    async def execute(self, data: RequestData, capability_type, state):
         """Execute action.
 
         https://yandex.ru/dev/dialogs/alice/doc/smart-home/reference/post-action-docpage/
@@ -239,8 +261,9 @@ class YandexEntity:
         if state is None or 'instance' not in state:
             raise SmartHomeError(
                 ERR_INVALID_VALUE,
-                "Invalid request: no 'instance' field in state {} / {}"
-                .format(capability_type, self.state.entity_id))
+                "Invalid request: no 'instance' field in state %s / %s"
+                % (capability_type, self.state.entity_id)
+            )
 
         instance = state['instance']
         for cpb in self.capabilities():
@@ -252,38 +275,19 @@ class YandexEntity:
         if not executed:
             raise SmartHomeError(
                 ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
-                "Unable to execute {} / {} for {}".format(capability_type,
-                                                          instance,
-                                                          self.state.entity_id
-                                                          ))
+                "Unable to execute %s / %s for %s"
+                % (capability_type, instance, self.state.entity_id)
+            )
 
     @callback
     def async_update(self):
         """Update the entity with latest info from Home Assistant."""
         self.state = self.hass.states.get(self.entity_id)
 
-        if self._capabilities is None:
-            return
+        if self._capabilities:
+            for trt in self._capabilities:
+                trt.state = self.state
 
-        for trt in self._capabilities:
-            trt.state = self.state
-
-
-def deep_update(target, source):
-    """Update a nested dictionary with another nested dictionary."""
-    for key, value in source.items():
-        if isinstance(value, Mapping):
-            target[key] = deep_update(target.get(key, {}), value)
-        else:
-            target[key] = value
-    return target
-
-
-def get_child_instances(cls):
-    instance_collection = []
-    for subclass in cls.__subclasses__():
-        if subclass.instance:
-            instance_collection.append(subclass.instance)
-        instance_collection.extend(get_child_instances(subclass))
-    
-    return instance_collection
+        if self._properties:
+            for prp in self._properties:
+                prp.state = self.state

@@ -21,7 +21,7 @@ from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_SUPPORTED_FEATURES
 from homeassistant.core import State
 from homeassistant.helpers.typing import HomeAssistantType
 
-from .const import (
+from custom_components.yandex_smart_home.const import (
     TYPE_OTHER,
     TYPE_THERMOSTAT,
     TYPE_THERMOSTAT_AC,
@@ -64,8 +64,8 @@ DOMAIN_TO_YANDEX_TYPES = {
     fan.DOMAIN: {
         MAPPING_DEFAULT: TYPE_THERMOSTAT,
         TYPE_HUMIDIFIER: lambda h, s, c: (
-            s.attributes.get(ATTR_MODEL, '').startswith("zhimi.humidifier.") or # Xiaomi Humidifiers
-            s.attributes.get(ATTR_TARGET_HUMIDITY) is not None # WeMo Humidifiers
+                s.attributes.get(ATTR_MODEL, '').startswith("zhimi.humidifier.") or  # Xiaomi Humidifiers
+                s.attributes.get(ATTR_TARGET_HUMIDITY) is not None  # WeMo Humidifiers
         )
     },
     group.DOMAIN: TYPE_SWITCH,
@@ -127,6 +127,7 @@ def determine_state_type(hass: HomeAssistantType, state: State, entity_config):
                 device_class = state.attributes.get(ATTR_DEVICE_CLASS)
                 if device_class in mapping_function:
                     return subtype
+
     elif isinstance(yandex_type, str):
         return yandex_type
 

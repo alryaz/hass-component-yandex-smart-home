@@ -1,22 +1,20 @@
 """Support for Yandex Smart Home."""
 import logging
 from json import loads
-from typing import TYPE_CHECKING, Tuple, Union, Optional
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Tuple, Union, Optional
 from uuid import uuid4
 
 from aiohttp.web import Request, Response
 from aiohttp.web_exceptions import HTTPUnauthorized, HTTPBadRequest, HTTPNotFound
-
 from homeassistant.components.http import HomeAssistantView
-from homeassistant.exceptions import Unauthorized
 
-from .const import DOMAIN
-from .smart_home import async_handle_message
+from custom_components.yandex_smart_home.const import DOMAIN
+from custom_components.yandex_smart_home.core.smart_home import async_handle_message
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
-    from .helpers import Config
+    from custom_components.yandex_smart_home.core.helpers import Config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +86,7 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
             request_id,
             request.path.replace(self.url, '', 1),
             message)
+
         _LOGGER.debug("Response: %s", result)
         return self.json(result)
 
@@ -103,5 +102,6 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
             request_id,
             request.path.replace(self.url, '', 1),
             {})
+
         _LOGGER.debug("Response: %s" % result)
         return self.json(result)
