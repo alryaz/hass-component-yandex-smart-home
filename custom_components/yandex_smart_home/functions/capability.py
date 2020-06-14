@@ -85,6 +85,8 @@ class _Capability(object):
         self.state = state
         self.entity_config = entity_config
 
+        self.use_override = self.has_override(state.domain, entity_config, state.attributes)
+
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Check whether current entity is supported."""
@@ -124,45 +126,44 @@ class _Capability(object):
     def parameters(self) -> Dict:
         """Return parameters for a devices request."""
         ent_state = self.state
-        if self.has_override(ent_state.domain, self.entity_config, ent_state.attributes):
+        if self.use_override:
             return self.parameters_override()
         return self.parameters_default()
 
     def parameters_default(self) -> Dict[str, Any]:
-        raise DefaultNotImplemented
+        raise DefaultNotImplemented(self.__class__)
 
     def parameters_override(self) -> Dict[str, Any]:
-        raise OverrideNotImplemented
+        raise OverrideNotImplemented(self.__class__)
 
     def get_value(self) -> Any:
         """Return the state value of this capability for this entity."""
         ent_state = self.state
-        if self.has_override(ent_state.domain, self.entity_config, ent_state.attributes):
+        if self.use_override:
             return self.get_value_override()
         return self.get_value_default()
 
     def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity using default mechanism."""
-        raise DefaultNotImplemented
+        raise DefaultNotImplemented(self.__class__)
 
     def get_value_override(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity using override."""
-        raise OverrideNotImplemented
+        raise OverrideNotImplemented(self.__class__)
 
     async def set_state(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
-        ent_state = self.state
-        if self.has_override(ent_state.domain, self.entity_config, ent_state.attributes):
+        if self.use_override:
             return await self.set_state_override(data, state)
         return await self.set_state_default(data, state)
 
     async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
-        raise DefaultNotImplemented
+        raise DefaultNotImplemented(self.__class__)
 
     async def set_state_override(self, data: 'RequestData', state: Dict) -> None:
         """Set device state using override."""
-        raise OverrideNotImplemented
+        raise OverrideNotImplemented(self.__class__)
 
 
 @register_capability
@@ -527,7 +528,7 @@ class _ModeCapability(_Capability):
     def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict):
         super().__init__(hass, state, entity_config)
 
-        if self.has_override(state.domain, entity_config, state.attributes):
+        if self.use_override:
             self.set_script = Script(hass, entity_config[self.instance][CONF_SET_SCRIPT])
         else:
             self.set_script = None
@@ -600,7 +601,7 @@ class _NumericModeCapability(_ModeCapability):
     attr_value: Optional[str] = None
     set_service: Optional[str] = None
 
-    def get_numeric_state(self):
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         program = self.state.attributes.get(self.attr_value)
         custom_programs = self.entity_config.get(self.custom_source)

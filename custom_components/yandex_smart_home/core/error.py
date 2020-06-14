@@ -1,15 +1,25 @@
 """Errors for Yandex Smart Home."""
+from typing import Optional
+import inspect
 
 
 class SmartHomeException(Exception):
     pass
 
 
-class DefaultNotImplemented(SmartHomeException):
+class NotImplementedException(SmartHomeException):
+    def __init__(self, cls):
+        super(NotImplementedException, self).__init__(
+            'Class %s does not implement %s'
+            % (cls.__name__, inspect.stack()[1].function)
+        )
+
+
+class DefaultNotImplemented(NotImplementedException):
     pass
 
 
-class OverrideNotImplemented(SmartHomeException):
+class OverrideNotImplemented(NotImplementedException):
     pass
 
 

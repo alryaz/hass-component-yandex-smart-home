@@ -1,10 +1,12 @@
-# HomeAssistant Hekr Devices Integration
+# _Yandex Smart Home_ for HomeAssistant
 [![GitHub Page](https://img.shields.io/badge/GitHub-alryaz%2Fhass--component--yandex--smart--home-blue)](https://github.com/alryaz/hass-component-yandex-smart-home)
 [![Donate Yandex](https://img.shields.io/badge/Donate-Yandex-red.svg)](https://money.yandex.ru/to/410012369233217)
 [![Donate PayPal](https://img.shields.io/badge/Donate-Paypal-blueviolet.svg)](https://www.paypal.me/alryaz)
 {% set mainline_num_ver = version_available.replace("v", "").replace(".", "") | int %}{%- set features = {
     'v2.0.0': 'Стандартный релиз; переопределения умений и свойств; настройка на русском',
-}-%}{%- set breaking_changes = namespace(header=True, changes={}) -%}{%- set bug_fixes = namespace(header=True, changes={}) -%}
+}-%}{%- set breaking_changes = namespace(header=True, changes={}) -%}{%- set bug_fixes = namespace(header=True, changes={
+    'v2.0.2': ['Fixed `input_source` capability on default setting']
+}) -%}
 
 {% if installed %}{% if version_installed == "master" %}
 #### ⚠ Вы используете версию для разработчиков
