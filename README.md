@@ -1,170 +1,372 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/custom-components/hacs)
-
-[![Donate](https://img.shields.io/badge/-Donate-purple.svg)](https://money.yandex.ru/to/41001142896898)
-
-## Yandex Smart Home custom component for Home Assistant
-
-
-### Installation
-1. Update home assistant to 0.96.0 at least
-1. Configure SSL certificate if it was not done already (***do not*** use self-signed certificate)
-1. Create dialog via https://dialogs.yandex.ru/developer/ (see [this section](#create-dialog))
-1. Install this component from HACS. That way you get updates automatically. But you also can just copy and add files into custom_components directory manually instead.
-1. Restart Home Assistant
-1. Follow the example `configuration.yaml` entry below to add integration.
-   1. It is also possible to enable this integration via `Settings` => `Integrations` menu within _HomeAssistant_. Search for _Yandex Smart Home_ and follow the activation wizard. Be aware that there are limitations to this method (such as current lack of per-entity configuration).
-1. Add devices via your Yandex app on Android/iOS (or in _Testing_ mode).
+# _Яндекс Умный Дом_ для HomeAssistant
+>[![hacs_badge](https://img.shields.io/badge/HACS-Default-green.svg)](https://github.com/custom-components/hacs)
+>[![Поддержка](https://img.shields.io/badge/%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B8%D0%B2%D0%B0%D0%B5%D1%82%D1%81%D1%8F%3F-%D0%B4%D0%B0-green.svg)](https://github.com/alryaz/hass-mosoblgaz/graphs/commit-activity)
+>
+>_Поддержка текущей ветки:_ @alryaz  
+>[![Пожертвование Yandex](https://img.shields.io/badge/%D0%9F%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-Yandex-red.svg)](https://money.yandex.ru/to/410012369233217)
+>[![Пожертвование PayPal](https://img.shields.io/badge/%D0%9F%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-Paypal-blueviolet.svg)](https://www.paypal.me/alryaz)
+>
+>_Оригинальный разработчик:_ @dmitry-k  
+>[![Репозиторий GitHub](https://img.shields.io/badge/GitHub-dmitry--k%2Fyandex_smart_home-blue)](https://github.com/dmitry-k/yandex_smart_home)
+>[![Пожертвование Yandex](https://img.shields.io/badge/%D0%9F%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-Yandex-red.svg)](https://money.yandex.ru/to/41001142896898)
 
 
-### Example configuration
+## Установка
+1. Обновите HomeAssistant до версии 0.96.0 и выше
+1. Настройте SSL для HomeAssistant (***do not*** use self-signed certificate)
+   1. Самоподписанные сертификаты **не подходят**
+   1. Для быстрой настройки советуется использовать [Let's Encrypt](https://www.home-assistant.io/blog/2015/12/13/setup-encryption-using-lets-encrypt/)
+1. Создайте диалог в [разделе разработчика диалогов Яндекс](https://dialogs.yandex.ru/developer/) (см. [детальное описание этапа](#create_dialog))
+1. Установите данный компонент:
+    1. _Посредством HACS: (рекомендуется)_
+    	1. Найдите репозиторий `Yandex Smart Home` в поиске.  
+    	   _В списке репозиториев может присутствовать оригинальная версия проекта. Для выбора данной версии, перед установкой проверьте, если @alryaz присутствует в списке разработчиков._
+    	1. Установите найденную интеграцию
+    1. _Ручная установка:_  
+       (подразумевается: путь к конфигурации HomeAssistant = `/config`)
+    	1. Клонируйте данный репозиторий:  
+    	   `git clone https://github.com/alryaz/hass-component-yandex-smart-home repo`
+    	1. Выберите последнюю ветку:  
+    	   ``cd repo && git checkout $(git describe --tags `git rev-list --tags --max-count=1`)``
+    	1. Переместите интеграцию в папку `custom_components`:  
+    	   `mkdir -p /config/custom_components && mv custom_components/yandex_smart_home /config/custom_components/`
+1. Перезапустите HomeAssistant
+1. Следуйте одной из инструкций по настройке компонента ниже
+1. Обновите устройства в приложении _Яндекс_ для [Android](https://play.google.com/store/apps/details?id=ru.yandex.searchplugin&hl=ru) / iOS (или в [панели разработчика](https://dialogs.yandex.ru/developer/) в тестовом режиме).
+	1. **Не забывайте повторять последнюю операцию при добавлении новых устройств в HomeAssistant!**
+	
+Для работоспособности интеграции требуется произвести её настройку в два этапа. Этап для HomeAssistant
+указан в данном разделе. Для перехода ко второму этапу, нажмите 
+
+## Настройка через меню `Интеграции`
+1. Откройте `Настройки` -> `Интеграции`
+1. Нажмите внизу справа страницы кнопку с плюсом
+1. Введите в поле поиска `Yandex Smart Home`
+   1. Если по какой-то причине интеграция не была найдена, убедитесь, что HomeAssistant был перезапущен после
+        установки интеграции.
+1. Выберите первый результат из списка
+1. Пройдите несколько этапов настройки следуя инструкциям на экране
+1. Если при настройке не были допущены ошибки, интеграция будет добавлена.  
+   После Вы можете перейти ко [второму этапу](#create_dialog) настройки.
+   
+## Настройка через `configuration.yaml`
+
+### Базовая конфигурация
+Указывается пустой новый раздел конфигруации под именем `yandex_smart_home`.  
+В данном режиме **все поддерживаемые объекты** будут передаваться в Яндекс.
 ```yaml
-# Example configuration.yaml entry
+# configuration.yaml
+...
+
+yandex_smart_home:
+```
+
+### Фильтр объектов
+Чтобы выбрать объекты, которые следует передавать в Яндекс, задайте фильтр объектов.
+
+Фильтр задаётся через ключ `filter` конфигурации.  
+Возможные атрибуты фильтра:
+  - `include_domains` &mdash; разрешить объекты из указанных доменов
+  - `exclude_domains` &mdash; запретить объекты из указанных доменов _(не должно пересекаться с предыдущей опцией)_
+  - `include_entities` &mdash; разрешить указанные объекты
+  - `exclude_entities` &mdash; запретить указанные объекты
+
+#### Пример конфигурации:
+```yaml
 yandex_smart_home:
   filter:
-    include_domains:
-      - switch
-      - light
-    include_entities:
-      - media_player.tv
-      - media_player.tv_lg
+    # Разрешение доменов `media_player` и `switch`
+    include_domains: ['media_player', 'switch']
+    
+    # Исключение домена `automation`
+    exclude_domains: automation
+    
+    # Разрешение объекта `light.living_room`
+    include_entities: light.living_room
+    
+    # Исключение объектов `switch.door_one` и `switch.door_two`
     exclude_entities:
-      - light.highlight
+      - switch.door_one
+      - switch.door_two
+```
+
+### Расширенная конфигурация объектов
+Дополнительная настройка включает в себя возможность настраивать отдельно некоторые функции и свойства объектов.
+Для указания объектов и соответствующих им параметров, добавьте ключ `entity_config` в конфигурацию. 
+
+#### Пример конфигурации
+```yaml
+yandex_smart_home:
   entity_config:
+    ...
+```
+##### Объект любого домена
+```yaml
+    ...
     switch.kitchen:
-      name: CUSTOM_NAME_FOR_YANDEX_SMART_HOME
-    light.living_room:
-      room: LIVING_ROOM
-      toggles:
-        backlight: light.wall_ornament
-    media_player.tv_lg:
+      # Переопределение имени в Yandex
+      # Определяется автоматически, по умолчанию значение атрибута `friendly_name`
+      name: Кухонный выключатель
+
+      # Переопределение комнаты в Yandex
+      # Определяется автоматически, по умолчанию значение берётся из комнат в HomeAssistant
+      room: Кухня
+      
+      # Переопределение типа устройства
+      # Влияет в основном на иконку в приложении Яндекс и на интерфейс
+      # взаимодействия; не влияет на автоматическое определение возможностей
+      # Определяется автоматически, по умолчанию: devices.type.other
+      type: devices.type.light
+    ...
+```
+Список поддерживаемых типов для опции `type`: [Устройства - Технологии Яндекса](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types-docpage/)
+##### Объект домена `media_player`
+```yaml
+    ...
+    media_player.kitchen_tv:
+      # Установка канала через атрибут `media_content_id`
+      # По умолчанию: false
       channel_set_via_media_content_id: true
+
+      # Форсировать относительное изменение громкости
+      # По умолчанию: false
+      relative_volume_only: true
+
+      # Указание соответствия источников значениям Яндекс
+      # По умолчанию: генерируется массив соответствий первых 10 и менее источников
+      # из атрибута `sources_list`.
+      # Возможные ключи: one, two, three, four, five, six, seven, nine, ten
       sources:
         one: "HDMI 1"
         two: "HDMI 2"
         three: "Composite"
         four: "Netflix App"
-      toggles:
-        controls_locked: switch.custom_webostv_controls_lock
-        backlight: switch.raspberry_pi_ambilight
-      properties:
-        power:
-          entity: sensor.global_power_monitor
-          attribute: television_socket
-    fan.xiaomi_miio_device:
-      name: "Xiaomi Humidifier"
-      room: LIVING_ROOM
-      type: devices.types.humidifier
-      properties:
-        temperature: sensor.temperature_123d45678910
-        humidity:
-          attribute: humidity
-        water_level:
-          attribute: depth
-```
 
+      # Скрипт переключения на следующий канал
+      # Для использования доступна переменная `entity_id`, совпадающая
+      # с ключом объекта (в данном случае
+      сhannel_up:
+        service: custom_tv_component.next_channel
+        data_template:
+          entity_id: {{ entity_id }}
 
-### Variable description
-```
-yandex_smart_home:
-  (map) (Optional) Configuration options for the Yandex Smart Home integration.
-
-  filter:
-    (map) (Optional) description: Filters for entities to include/exclude from Yandex Smart Home.
-    include_entities:
-      (list) (Optional) description: Entity IDs to include.
-    include_domains:
-      (list) (Optional) Domains to include.
-    exclude_entities:
-      (list) (Optional) Entity IDs to exclude.
-    exclude_domains:
-      (list) (Optional) Domains to exclude.
-
-  entity_config:
-    (map) (Optional) Entity specific configuration for Yandex Smart Home.
-    ENTITY_ID:
-      (map) (Optional) Entity to configure.
-      name:
-        (string) (Optional) Name of entity to show in Yandex Smart Home.
-      room:
-        (string) (Optional) Associating this device to a room in Yandex Smart Home
-      type:
-        (string) (Optional) Allows to force set device type. For exmaple set devices.types.purifier to display device as purifier (instead default devices.types.humidifier for such devices) 
-      channel_set_via_media_content_id:
-        (boolean) (Optional) (media_player only) Enables ability to set channel by number for some TVs
-        (TVs that support channel change via passing number as media_content_id)
-      relative_volume_only:
-        (boolean) (Optional) (media_player only) Force disable ability to get/set volume by number
-      sources:
-        (dict, boolean) (Optional) (media_player only) Define selectable inputs (or map one-to-one in case of 'true').
-        one / two / three / ... / ten:
-          (string) (Optional) Source name <=> Input source mapping.
-      backlight:
-        (string) (Optional) Entity ID to use as backlight control (must be toggleable).
-      channel_up:
-        (map) (Optional) Script to switch to next channel (avoids using next track).
+      # Аналогичный скрипт для переключения на предыдущий канал
       channel_down:
-        (map) (Optional) Script to switch to previous channel (avoids using previous track).
-      toggles:
-        (dict) (Optional) Assign togglable entities for certain features or override auto-detected ones.
-        backlight / controls_locked ...:
-          (entity ID) Entity ID to be used with the toggle
-      properties:
-        (dict) (Optional) Assign entities or attributes for certain properties or override auto-detected ones.
-        humidity / temperature / water_level / co2_level / power / voltage:
-          (dict / entity ID) Configuration data for property (only entity ID can be specified instead of dictionary, if using other entities).
-          entity:
-            (string) (Optional) Custom entity, any sensor can be added 
-          attribute:
-            (string) (Optional) Attribute of an object to receive data
+        service: custom_tv_component.prev_channel
+        data_template:
+           {{ entity_id }}
+    ...
+```
+##### Объект домена `light`
+```yaml
+    ...
+    light.rgb_controller:
+      # (для объектов с эффектами) Указание соответствия програм значениям Яндекс
+      # По умолчанию: генерируется массив соответствий первых 10 и менее эффектов
+      # из атрибута `effects_list`.
+      # Возможные ключи: one, two, three, four, five, six, seven, nine, ten
+      programs:
+        one: 0
+        two: 1
+        three: 2
+        four: 3
+```
 
-  diagnostics_mode:
-    (boolean) (Optional) Enable diagnostics mode (Unauthorized requests will be allowed; never use this option in production environment!)
+### Расширенная конфигурация: _Переключатели (Capability &#8680; Toggle)_
+Компонент поддерживает все переключатели Yandex на момент последнего обновления. Для большинства переключателей
+существует процесс автоматического определения совместимости, однако в случае невозможности определить
+компонентом подходящие переключатели, возможно также определить их вручную.
+
+_Внимание:_ При наличии автоматической совместимости объекта и переключателя, и установке переопределения
+посредством конфигурации, переопределение замещает собственный переключатель объекта.
+
+Установка переопределений производится под ключом `toggles` в формате `тип: объект-переключатель`  
+_Требования для объектов-переключателей:_ состояния объекта должны быть `on` или `off`  
+Полный список доступных переключателей: [Список функций Toggle - Технологии Яндекса](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-instance-docpage/)
+
+#### Пример конфигурации
+```yaml
+yandex_smart_home:
+  entity_config:
+    media_player.tv_lg:
+      toggles:
+        # Блокировка управления телевизором
+        controls_locked: switch.custom_webostv_controls_lock
+        
+        # Подсветка
+        backlight: light.raspberry_pi_ambilight
+
+        # Приглушить звук
+        mute: switch.sound_system
 ```
 
 
-### Overriding exposed entity domain &mdash; `type` option
-When exposing device under a domain different from default confirm compatibility by consulting the
-[Yandex API documentation](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types-docpage/) by
-comparing sets of capabilities expected from default and target domains. Very common custom exposure would
-be rendering a `switch` entity (example above) as a `socket`.
+### Расширенная конфигурация: _Свойства (Property)_
+Компонент поддерживает все свойства Yandex на момент последнего обновления. Для большинства свойств
+существует процесс автоматического определения совместимости, однако в случае невозможности определить
+компонентом подходящие свойства, возможно также переопределить свойства вручную.
 
-Alternative way to override device type is to use `yandex_type` entity attribute. Enable expert configuration mode
-in HomeAssistant and open `Customize` menu. From there you will be able to add a custom attribute. The preference,
-however, will be given to the option provided in the addon configuration; therefore, if you have custom type
-specified using both methods above, the former will be provided to Yandex.
+Полный список доступных свойств: [Список свойств Float - Технологии Яндекса](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/float-instance-docpage/)  
+На данный момент доступны только свойства _Float_
 
-### Room/Area support &mdash; `room` option
-Entities that have not got rooms explicitly set and that have been placed in Home Assistant areas will return
-room hints to Yandex Smart Home with the devices in those areas. You can always override these manually
-by specified a `room` option in corresponding `entity_config` entries.
+#### Пример конфигурации
+```yaml
+yandex_smart_home:
+  entity_config:
+    sensor.home_power_meter:
+      properties:
+        # Использование атрибута `voltage` объекта `sensor.home_power_meter`
+        voltage: voltage
 
-### Create dialog
-Go to https://dialogs.yandex.ru/developer/ and create smart home skill.
+        # Использование состояния объекта `sensor.home_power_meter_current`
+        current: sensor.home_power_meter_current
 
-Field | Value
+        # Использование атрибута `temperature` объекта `sensor.home_power_meter_temperature` 
+        temperature:
+          entity_id: sensor.home_power_meter_temeperature
+          attribute: temperature
+```
+
+### Расширенная конфигурация: _Диапазоны (Capability -> Range)_
+Для данного раздела конфигурации действуют те же регламенты, что и для _Переключателей_, за исключением того,
+что целевой объект получения данных должен иметь числовое значение состояния / атрибута.
+
+Полный список доступных диапазонов: [Список функций Range - Технологии Яндекса](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/range-instance-docpage/)
+
+#### Пример конфигурации
+```yaml
+yandex_smart_home:
+  entity_config:
+    light.christmas_lights:
+      ranges:
+        # Пример: Диапазон яркости
+        brightness:
+          # (обязательно) Целевой объект
+          entity_id: group.christmas_light_brightness
+
+          # (обязательно) Скрипт/служба установки значения
+          # При выполнении доступна переменная `value` типа `float`, содержащая
+          # значение, запрошенное Яндексом, помноженное на `multiplier` (см. ниже)
+          # Также доступна переменная `entity_id` с ID объекта.
+          set_script:
+            service: light.turn_on
+            data_template:
+              entity_id: {{ entity_id }}
+              brightness: {{ value }}
+
+          # Минимальное значение (для Яндекса)
+          minimum: 0
+
+          # Максимальное значение (для Яндекса)
+          maximum: 100
+
+          # Шаг изменения (в данном случае: +5, -5)
+          prceision: 5
+
+          # Множитель для значений (по умолчанию 1)
+          # Требуется указывать для объектов, которые используют
+          # в качестве значений дробные числа в диапазоне от 0 до 1. 
+          multiplier: 0.01
+          
+```
+
+### Расширенная конфигурация: _Режимы (Capability -> Mode)_
+Для данного раздела конфигурации действуют те же регламенты, что и для _Переключателей_, за исключением того,
+что целевой объект получения данных должен иметь состояния из списка состояний соответствующего режима,
+если не указан отдельный массив соответствий между состояниями.
+
+Полный список доступных режимов: [Список функций Mode - Технологии Яндекса](https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/)
+
+#### Пример конфигурации
+```yaml
+yandex_smart_home:
+  entity_config:
+    switch.kitchen_kettle:
+      modes:
+        # Пример: Режим кофемашины
+        coffee_mode:
+          # (обязательно) Целевой объект
+          entity_id: sensor.uart_jura_coffee_mode
+
+          # (обязательно) Скрипт/служба установки значения
+          # При выполнении доступна переменная `value` типа `float`, содержащая
+          # значение, запрошенное Яндексом, помноженное на `multiplier` (см. ниже).
+          # Также доступна переменная `entity_id` с ID объекта.
+          set_script:
+            service: shell_command.send_jura_coffee_mode
+            data_template:
+              mode: {{ value }}
+
+          # Сопоставление значений с объекта с доступными для режима.
+          # Слева указывается режим.
+          # Справа указываются все возможные состояния для соответствующего режима.
+          # При установке режима, если справа задан список, будет использовано первое
+          # значение из списка при вызове скрипта выше.
+          mapping:
+            americano: 01D3
+            cappucino: ['3A12', '3A13']
+            double_espresso: DD11
+```
+
+### Дополнительные параметры
+```yaml
+yandex_smart_home:
+  # Включение диагностического режима.
+  #
+  # !!! !!! ВНИМАНИЕ !!! !!!
+  # НЕ ИСПОЛЬЗУЙТЕ ДАННУЮ ОПЦИЮ, ЕСЛИ ВАМ ОНА НЕ ТРЕБУЕТСЯ!
+  # ОНА ПОЗВОЛЯЕТ ЛЮБОЙ СЛУЖБЕ / ПОЛЬЗОВАТЕЛЮ ПОСЫЛАТЬ НА ВАШ
+  # HOMEASSISTANT ЗАПРОСЫ К API КОМПОНЕНТА БЕЗ АВТОРИЗАЦИИ!
+  # ДАННАЯ ФУНКЦИЯ ПРЕДНАЗНАЧЕНА ИСКЛЮЧИТЕЛЬНО ДЛЯ РАЗРАБОТКИ!
+  # !!! !!! ВНИМАНИЕ !!! !!!
+  #
+  # По умолчанию: false
+  diagnostics_mode: true
+
+  # Скрывать уведомления с конфигурацией и предупреждения
+  # о работе режима диагностики. Это полезно если Вы часто
+  # перезагружаете HomeAssistant и не желаете требовать Алису
+  # выполнять команду каждый раз.
+  # По умолчанию: false
+  hide_notifications: true
+```
+
+## Для разработчиков
+Если Вы являетесь разработчиком компонента, создающего объекты, Вы можете внедрить передачу правильного
+типа объекта, добавив атрибут `yandex_type` в список атрибутов состояния (`device_state_attributes`)
+объекта. Это позволит улучшить связку _Устройство_ -> _HomeAssistant_ -> _Yandex_ для конечного пользователя.
+
+## <a name="create_dialog"></a>Создание диалога
+
+Перейдите в [панель разработчика диалгов](https://dialogs.yandex.ru/developer/) и создайте новый навык _Умный дом_:
+
+При создании конфигурации, используйте следующие параметры
+
+Поле | Значение
 ------------ | -------------
-Endpoint URL | https://[YOUR HOME ASSISTANT URL:PORT]/api/yandex_smart_home
+Название | Название диалога (любая строка)
+Endpoint URL | `https://<Хост HomeAssistant>:<Порт>/api/yandex_smart_home`
+Не показывать в каталоге | Отметить галочку
+Подзаголовок | Подзаголовок (любая строка)
+Имя разработчика | Ваше имя (или придуманное)
+Email разработчика | Ваш E-mail в Яндекс (для подтверждения)
+Официальный навык | `Нет`
+Описание | Описание навыка (любая строка)
+Иконка | Иконка навыка (пример: [картинка из поста](https://community.home-assistant.io/t/round-icon-for-android/23019/4))
 
-For account linking use button at the bottom of skill settings page, fill it
- using values like below:
+Для связывания аккаунтов используйте кнопку внизу страницы настройки умения,
+и заполните значения таким образом:
 
-Field | Value
+Поле | Значение
 ------------ | -------------
-Client identifier | https://social.yandex.net/
-API authorization endpoint | https://[YOUR HOME ASSISTANT URL:PORT]/auth/authorize
-Token Endpoint | https://[YOUR HOME ASSISTANT URL:PORT]/auth/token
-Refreshing an Access Token | https://[YOUR HOME ASSISTANT URL:PORT]/auth/token
+Идентификатор приложения | `https://social.yandex.net/`
+Секрет приложения | Любая непустая последовательность символов
+URL авторизации | `https://<Хост HomeAssistant>:<Порт>/auth/authorize`
+URL для получения токена | `https://<Хост HomeAssistant>:<Порт>/auth/token`
+URL для обновления токена | `https://<Хост HomeAssistant>:<Порт>/auth/token`
+Идентификатор группы действий | Оставить пустым
 
-### Diagnostics mode
-Diagnostics mode can only be enabled using YAML configuration by adding `diagnostics_mode: true` to `yandex_smart_home` domain configuration.
-This mode allows unauthorized requests to be processed. This is technically an alternative to requesting devices via Yandex' own testing
-interface, however it also allows to craft custom requests offline. **DO NOT ENABLE THIS MODE IN PRODUCTION ENVIRONMENT!**
-
-Upon enabling, a persistent notification will appear with a list of supported URLs. All of the provided URLs will open in a new tab.
-Using a JSON-formatting extension is recommended.
-
-### Supported HomeAssistant domains
-_This is a work-in-progress summary, there are more features to mention_
+## Поддерживаемый функционал **_(WIP)_**
 - [x] Automations: `automation`
   - [ ] Matching domain exposure
   - [x] Capabilities:

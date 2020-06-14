@@ -39,6 +39,9 @@ ATTR_CURRENT_POWER_W = "current_power_w"
 ATTR_WATER_LEVEL = "water_level"
 ATTR_YANDEX_TYPE = "yandex_type"
 
+# Attributes for services
+ATTR_VALUE = "value"
+
 # Yandex device types
 # https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types-docpage/
 PREFIX_TYPES = 'devices.types.'

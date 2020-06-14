@@ -47,7 +47,7 @@ from custom_components.yandex_smart_home.const import (
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY,
     CONF_INPUT_SOURCES, CONF_ENTITY_TOGGLES,
     CONF_SCRIPT_CHANNEL_UP, CONF_SCRIPT_CHANNEL_DOWN, CONF_ENTITY_MODES, CONF_MAPPING, ERR_INTERNAL_ERROR,
-    CONF_SET_SCRIPT, CONF_PRECISION, CONF_MULTIPLIER, CONF_ENTITY_RANGES, MODES_NUMERIC)
+    CONF_SET_SCRIPT, CONF_PRECISION, CONF_MULTIPLIER, CONF_ENTITY_RANGES, MODES_NUMERIC, ATTR_VALUE)
 from custom_components.yandex_smart_home.core.error import SmartHomeError, DefaultNotImplemented, \
     OverrideNotImplemented
 
@@ -524,6 +524,14 @@ class _ModeCapability(_Capability):
     type = CAPABILITIES_MODE
     internal_modes: Tuple[str] = NotImplemented
 
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict):
+        super().__init__(hass, state, entity_config)
+
+        if self.has_override(state.domain, entity_config, state.attributes):
+            self.set_script = Script(hass, entity_config[self.instance][CONF_SET_SCRIPT])
+        else:
+            self.set_script = None
+
     @classmethod
     def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
         """Determine whether mode capability has an override."""
@@ -578,9 +586,10 @@ class _ModeCapability(_Capability):
                 raise SmartHomeError(ERR_INVALID_VALUE, msg="Unsupported mode")
             value = override_config[value][0]
 
-        script_object = Script(self.hass, override_config[CONF_SET_SCRIPT])
-
-        await script_object.async_run({'value': value}, context=data.context)
+        await self.set_script.async_run({
+            ATTR_VALUE: value,
+            ATTR_ENTITY_ID: override_config[CONF_ENTITY_ID]
+        }, context=data.context)
 
 
 class _NumericModeCapability(_ModeCapability):
@@ -1051,7 +1060,11 @@ class _RangeCapability(_Capability):
         override_config = self.get_override_config(self.entity_config)
         value = float(state['value']) * override_config[CONF_MULTIPLIER]
         script_object = Script(self.hass, override_config[CONF_SET_SCRIPT])
-        await script_object.async_run({'value': value}, context=data.context)
+
+        await script_object.async_run({
+            'value': value,
+            'entity_id': override_config[CONF_ENTITY_ID]
+        }, context=data.context)
 
 
 @register_capability
@@ -1375,13 +1388,17 @@ class ChannelCapability(_RangeCapability):
         if 'relative' in state and state['relative']:
             if state['value'] > 0:
                 if self.script_channel_up:
-                    await self.script_channel_up.async_run(context=data.context)
+                    await self.script_channel_up.async_run({
+                        ATTR_ENTITY_ID: self.state.entity_id,
+                    }, context=data.context)
                     return
                 else:
                     service = media_player.SERVICE_MEDIA_NEXT_TRACK
             else:
                 if self.script_channel_down:
-                    await self.script_channel_down.async_run(context=data.context)
+                    await self.script_channel_down.async_run({
+                        ATTR_ENTITY_ID: self.state.entity_id,
+                    }, context=data.context)
                     return
                 else:
                     service = media_player.SERVICE_MEDIA_PREVIOUS_TRACK
