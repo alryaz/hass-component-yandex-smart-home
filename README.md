@@ -1,3 +1,4 @@
+[<img src="https://raw.githubusercontent.com/alryaz/hass-component-yandex-smart-home/master/images/header.png" height="100">](https://yandex.ru/alice/smart-home)
 # _Яндекс Умный Дом_ для HomeAssistant
 >[![hacs_badge](https://img.shields.io/badge/HACS-Default-green.svg)](https://github.com/custom-components/hacs)
 >[![Поддержка](https://img.shields.io/badge/%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B8%D0%B2%D0%B0%D0%B5%D1%82%D1%81%D1%8F%3F-%D0%B4%D0%B0-green.svg)](https://github.com/alryaz/hass-mosoblgaz/graphs/commit-activity)
@@ -337,8 +338,10 @@ yandex_smart_home:
 объекта. Это позволит улучшить связку _Устройство_ -> _HomeAssistant_ -> _Yandex_ для конечного пользователя.
 
 ## <a name="create_dialog"></a>Создание диалога
+Перейдите в [панель разработчика диалогов](https://dialogs.yandex.ru/developer/) и создайте новый навык _Умный дом_:
 
-Перейдите в [панель разработчика диалгов](https://dialogs.yandex.ru/developer/) и создайте новый навык _Умный дом_:
+[<img alt="Панель разработчика диалогов" src="https://raw.githubusercontent.com/alryaz/hass-component-yandex-smart-home/master/images/step_developer_page.png" height="200">](https://raw.githubusercontent.com/alryaz/hass-component-yandex-smart-home/master/images/step_developer_page.png)
+[<img alt="Выбор типа умения" src="https://raw.githubusercontent.com/alryaz/hass-component-yandex-smart-home/master/images/step_developer_type.png" height="200">](https://raw.githubusercontent.com/alryaz/hass-component-yandex-smart-home/master/images/step_developer_type.png)
 
 При создании конфигурации, используйте следующие параметры
 
