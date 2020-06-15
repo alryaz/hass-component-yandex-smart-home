@@ -125,7 +125,6 @@ class _Capability(object):
 
     def parameters(self) -> Dict:
         """Return parameters for a devices request."""
-        ent_state = self.state
         if self.use_override:
             return self.parameters_override()
         return self.parameters_default()
@@ -193,6 +192,100 @@ class OnOffCapability(_Capability):
         return None
 
     @classmethod
+    def issue_state_retrieval(cls, entity_state: State) -> bool:
+        """Return the state value of this capability for given entity."""
+        entity_domain = entity_state.domain
+        current_state = entity_state.state
+
+        if entity_domain == cover.DOMAIN:
+            return current_state == cover.STATE_OPEN
+
+        elif entity_domain == vacuum.DOMAIN:
+            return current_state == STATE_ON or current_state == \
+                   vacuum.STATE_CLEANING
+
+        elif entity_domain == climate.DOMAIN:
+            return current_state != climate.HVAC_MODE_OFF
+
+        elif entity_domain == lock.DOMAIN:
+            return current_state == lock.STATE_UNLOCKED
+
+        elif entity_domain == water_heater.DOMAIN:
+            operation_mode = entity_state.attributes.get(water_heater.ATTR_OPERATION_MODE)
+            operation_list = entity_state.attributes.get(water_heater.ATTR_OPERATION_LIST)
+            return operation_mode != cls.get_water_heater_operation(STATE_OFF, operation_list)
+
+        return current_state != STATE_OFF
+
+    @classmethod
+    async def issue_state_command(cls, hass: HomeAssistantType, entity_state: State, data: 'RequestData', state: Dict):
+        """Set state for given entity."""
+        new_state = state['value']
+        if type(new_state) is not bool:
+            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
+
+        entity_domain = entity_state.domain
+        entity_id = entity_state.entity_id
+
+        service_domain = entity_domain
+        service_data = {
+            ATTR_ENTITY_ID: entity_id,
+        }
+        if entity_domain == group.DOMAIN:
+            service_domain = HA_DOMAIN
+            service = SERVICE_TURN_ON if new_state else SERVICE_TURN_OFF
+
+        elif entity_domain == cover.DOMAIN:
+            service = SERVICE_OPEN_COVER if new_state else \
+                SERVICE_CLOSE_COVER
+
+        elif entity_domain == vacuum.DOMAIN:
+            features = entity_state.attributes.get(ATTR_SUPPORTED_FEATURES)
+            if new_state:
+                if features & vacuum.SUPPORT_START:
+                    service = vacuum.SERVICE_START
+                else:
+                    service = SERVICE_TURN_ON
+            else:
+                if features & vacuum.SUPPORT_RETURN_HOME:
+                    service = vacuum.SERVICE_RETURN_TO_BASE
+                elif features & vacuum.SUPPORT_STOP:
+                    service = vacuum.SERVICE_STOP
+                else:
+                    service = SERVICE_TURN_OFF
+
+        elif entity_domain == scene.DOMAIN or entity_domain == script.DOMAIN:
+            if new_state is False:
+                _LOGGER.warning(("An 'off' command was issued via Yandex to %s. "
+                                 "Please, check your configuration.") % entity_id)
+                return
+            service = SERVICE_TURN_ON
+
+        elif entity_domain == lock.DOMAIN:
+            service = SERVICE_UNLOCK if new_state else \
+                SERVICE_LOCK
+
+        elif entity_domain == water_heater.DOMAIN:
+            operation_list = entity_state.attributes.get(water_heater.ATTR_OPERATION_LIST)
+            service = SERVICE_SET_OPERATION_MODE
+            if new_state:
+                service_data[water_heater.ATTR_OPERATION_MODE] = \
+                    cls.get_water_heater_operation(STATE_ON, operation_list)
+            else:
+                service_data[water_heater.ATTR_OPERATION_MODE] = \
+                    cls.get_water_heater_operation(STATE_OFF, operation_list)
+        else:
+            service = SERVICE_TURN_ON if new_state else SERVICE_TURN_OFF
+
+        await hass.services.async_call(
+            service_domain,
+            service,
+            service_data,
+            blocking=(entity_domain != script.DOMAIN),
+            context=data.context
+        )
+
+    @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
         if domain == media_player.DOMAIN:
@@ -200,7 +293,7 @@ class OnOffCapability(_Capability):
 
         if domain == vacuum.DOMAIN:
             return (features & vacuum.SUPPORT_START and (
-                        features & vacuum.SUPPORT_RETURN_HOME or features & vacuum.SUPPORT_STOP)) or (
+                    features & vacuum.SUPPORT_RETURN_HOME or features & vacuum.SUPPORT_STOP)) or (
                                features & vacuum.SUPPORT_TURN_ON and features & vacuum.SUPPORT_TURN_OFF)
 
         if domain == water_heater.DOMAIN and features & water_heater.SUPPORT_OPERATION_MODE:
@@ -230,97 +323,11 @@ class OnOffCapability(_Capability):
         """Return parameters for a devices request."""
         return None
 
-    @classmethod
-    def issue_state_retrieval(cls, entity_state: State) -> bool:
-        """Return the state value of this capability for given entity."""
-        entity_domain = entity_state.domain
-        current_state = entity_state.state
-
-        if entity_domain == cover.DOMAIN:
-            return current_state == cover.STATE_OPEN
-        elif entity_domain == vacuum.DOMAIN:
-            return current_state == STATE_ON or current_state == \
-                   vacuum.STATE_CLEANING
-        elif entity_domain == climate.DOMAIN:
-            return current_state != climate.HVAC_MODE_OFF
-        elif entity_domain == lock.DOMAIN:
-            return current_state == lock.STATE_UNLOCKED
-        elif entity_domain == water_heater.DOMAIN:
-            operation_mode = entity_state.attributes.get(water_heater.ATTR_OPERATION_MODE)
-            operation_list = entity_state.attributes.get(water_heater.ATTR_OPERATION_LIST)
-            return operation_mode != cls.get_water_heater_operation(STATE_OFF, operation_list)
-        return current_state != STATE_OFF
-
     def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         return self.issue_state_retrieval(self.state)
 
-    @classmethod
-    async def issue_state_command(cls, hass: HomeAssistantType, entity_state: State, data: 'RequestData', state: Dict):
-        """Set state for given entity."""
-        new_state = state['value']
-        if type(new_state) is not bool:
-            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
-
-        entity_domain = entity_state.domain
-        entity_id = entity_state.entity_id
-
-        service_domain = entity_domain
-        service_data = {
-            ATTR_ENTITY_ID: entity_id,
-        }
-        if entity_domain == group.DOMAIN:
-            service_domain = HA_DOMAIN
-            service = SERVICE_TURN_ON if new_state else SERVICE_TURN_OFF
-        elif entity_domain == cover.DOMAIN:
-            service = SERVICE_OPEN_COVER if new_state else \
-                SERVICE_CLOSE_COVER
-        elif entity_domain == vacuum.DOMAIN:
-            features = entity_state.attributes.get(ATTR_SUPPORTED_FEATURES)
-            if new_state:
-                if features & vacuum.SUPPORT_START:
-                    service = vacuum.SERVICE_START
-                else:
-                    service = SERVICE_TURN_ON
-            else:
-                if features & vacuum.SUPPORT_RETURN_HOME:
-                    service = vacuum.SERVICE_RETURN_TO_BASE
-                elif features & vacuum.SUPPORT_STOP:
-                    service = vacuum.SERVICE_STOP
-                else:
-                    service = SERVICE_TURN_OFF
-
-        elif entity_domain == scene.DOMAIN or entity_domain == script.DOMAIN:
-            if new_state is False:
-                _LOGGER.warning(("An 'off' command was issued via Yandex to %s. "
-                                 "Please, check your configuration.") % entity_id)
-                return
-            service = SERVICE_TURN_ON
-
-        elif entity_domain == lock.DOMAIN:
-            service = SERVICE_UNLOCK if new_state else \
-                SERVICE_LOCK
-        elif entity_domain == water_heater.DOMAIN:
-            operation_list = entity_state.attributes.get(water_heater.ATTR_OPERATION_LIST)
-            service = SERVICE_SET_OPERATION_MODE
-            if new_state:
-                service_data[water_heater.ATTR_OPERATION_MODE] = \
-                    cls.get_water_heater_operation(STATE_ON, operation_list)
-            else:
-                service_data[water_heater.ATTR_OPERATION_MODE] = \
-                    cls.get_water_heater_operation(STATE_OFF, operation_list)
-        else:
-            service = SERVICE_TURN_ON if new_state else SERVICE_TURN_OFF
-
-        await hass.services.async_call(
-            service_domain,
-            service,
-            service_data,
-            blocking=(entity_domain != script.DOMAIN),
-            context=data.context
-        )
-
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict):
         """Set state for this entity."""
         await self.issue_state_command(self.hass, self.state, data, state)
 
