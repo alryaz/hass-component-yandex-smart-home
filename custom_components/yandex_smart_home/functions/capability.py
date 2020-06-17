@@ -786,7 +786,7 @@ class ThermostatCapability(_ModeCapability):
 
         return 'auto'
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict):
         """Set device state."""
         value = None
         for climate_value, yandex_value in self.climate_map.items():
@@ -861,8 +861,10 @@ class FanSpeedCapability(_ModeCapability):
     def get_ha_by_yandex_value(self, yandex_value):
         if self.state.domain == climate.DOMAIN:
             speed_list = self.state.attributes.get(climate.ATTR_FAN_MODES)
+
         elif self.state.domain == fan.DOMAIN:
             speed_list = self.state.attributes.get(fan.ATTR_SPEED_LIST)
+
         else:
             speed_list = []
 
@@ -889,7 +891,7 @@ class FanSpeedCapability(_ModeCapability):
 
         return 'auto'
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict):
         """Set device state."""
         value = self.get_ha_by_yandex_value(state['value'])
 
@@ -899,9 +901,11 @@ class FanSpeedCapability(_ModeCapability):
         if self.state.domain == climate.DOMAIN:
             service = climate.SERVICE_SET_FAN_MODE
             attr = climate.ATTR_FAN_MODE
+
         elif self.state.domain == fan.DOMAIN:
             service = fan.SERVICE_SET_SPEED
             attr = fan.ATTR_SPEED
+
         else:
             raise SmartHomeError(ERR_INVALID_VALUE, "Unsupported domain")
 
@@ -968,7 +972,7 @@ class SwingCapability(_ModeCapability):
             climate.const.SWING_OFF
         )
 
-    async def set_state(self, data: 'RequestData', state: dict):
+    async def set_state_default(self, data: 'RequestData', state: dict):
         for hass_mode, yandex_mode in self.modes_swing.items():
             if yandex_mode == state['value'] and hass_mode in self.state.attributes.get(climate.const.ATTR_SWING_MODES):
                 await self.hass.services.async_call(
@@ -1514,7 +1518,7 @@ class RgbCapability(_ColorSettingCapability):
 
         return rgb
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
         red = (state['value'] >> 16) & 0xFF
         green = (state['value'] >> 8) & 0xFF
@@ -1547,7 +1551,7 @@ class TemperatureKCapability(_ColorSettingCapability):
 
         return color_util.color_temperature_mired_to_kelvin(kelvin)
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
         await self.hass.services.async_call(
             light.DOMAIN,
