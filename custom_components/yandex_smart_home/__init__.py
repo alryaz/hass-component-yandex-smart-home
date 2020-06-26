@@ -118,18 +118,23 @@ RANGE_OVERRIDES_SCHEMA = vol.All(
 
 ENTITY_SCHEMA = vol.Schema(
     {
+        # Entity options
         vol.Optional(CONF_NAME): cv.string,
         vol.Optional(CONF_ROOM): cv.string,
         vol.Optional(CONF_TYPE): cv.string,
 
+        # Additional options
         vol.Optional(CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID): cv.boolean,
         vol.Optional(CONF_RELATIVE_VOLUME_ONLY): cv.boolean,
         vol.Optional(CONF_SCRIPT_CHANNEL_UP): cv.SCRIPT_SCHEMA,
         vol.Optional(CONF_SCRIPT_CHANNEL_DOWN): cv.SCRIPT_SCHEMA,
 
+        # Numeric mode capabilities
+        # (True - enable automatic, False - disable, dictionary - custom modes)
         vol.Optional(CONF_INPUT_SOURCES, default=True): NUMERIC_MODE_SCHEMA,
         vol.Optional(CONF_PROGRAMS, default=True): NUMERIC_MODE_SCHEMA,
 
+        # Overrides
         vol.Optional(CONF_ENTITY_PROPERTIES, default={}): PROPERTY_OVERRIDES_SCHEMA,
         vol.Optional(CONF_ENTITY_TOGGLES, default={}): TOGGLE_OVERRIDES_SCHEMA,
         vol.Optional(CONF_ENTITY_MODES, default={}): MODE_OVERRIDES_SCHEMA,

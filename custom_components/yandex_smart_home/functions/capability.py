@@ -137,7 +137,6 @@ class _Capability(object):
 
     def get_value(self) -> Any:
         """Return the state value of this capability for this entity."""
-        ent_state = self.state
         if self.use_override:
             return self.get_value_override()
         return self.get_value_default()
@@ -535,10 +534,10 @@ class _ModeCapability(_Capability):
     def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict):
         super().__init__(hass, state, entity_config)
 
-        if self.use_override:
-            self.set_script = Script(hass, entity_config[self.instance][CONF_SET_SCRIPT])
-        else:
-            self.set_script = None
+        self.set_script = Script(
+            hass,
+            self.get_override_config(entity_config)[CONF_SET_SCRIPT]
+        ) if self.use_override else None
 
     @classmethod
     def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
@@ -602,23 +601,33 @@ class _ModeCapability(_Capability):
 
 class _NumericModeCapability(_ModeCapability):
     internal_modes = MODES_NUMERIC
-    custom_source = NotImplemented
+    custom_numeric_mode_source = NotImplemented
 
     attr_list: Optional[str] = None
     attr_value: Optional[str] = None
     set_service: Optional[str] = None
 
+    @classmethod
+    def _numeric_mode_supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        """Check whether numeric mode is supported"""
+        raise NotImplementedError
+
+    @classmethod
+    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        return entity_config.get(cls.custom_numeric_mode_source) is not False \
+               and cls._numeric_mode_supported(domain, features, entity_config, attributes)
+
     def get_value_default(self) -> Optional[Union[str, float, int]]:
         """Return the state value of this capability for this entity."""
         program = self.state.attributes.get(self.attr_value)
-        custom_programs = self.entity_config.get(self.custom_source)
+        custom_numeric_modes = self.entity_config.get(self.custom_numeric_mode_source)
 
-        if custom_programs is None:
+        if custom_numeric_modes is True:
             program_list = self.state.attributes.get(self.attr_list, [])
             iterator = zip(self.internal_modes, program_list)
 
         else:
-            iterator = custom_programs.items()
+            iterator = custom_numeric_modes.items()
 
         for yandex_program, local_program in iterator:
             if local_program == program:
@@ -627,9 +636,9 @@ class _NumericModeCapability(_ModeCapability):
         return self.internal_modes[0]
 
     def parameters_default(self) -> Dict[str, Any]:
-        custom_values = self.entity_config.get(self.custom_source)
+        custom_numeric_modes = self.entity_config.get(self.custom_numeric_mode_source)
 
-        if custom_values is None:
+        if custom_numeric_modes is True:
             program_list = self.state.attributes.get(self.attr_list, [])
             modes = [
                 {"value": self.internal_modes[i]}
@@ -639,7 +648,7 @@ class _NumericModeCapability(_ModeCapability):
         else:
             modes = [
                 {"value": v}
-                for v in custom_values.keys()
+                for v in custom_numeric_modes.keys()
             ]
 
         return {
@@ -649,7 +658,7 @@ class _NumericModeCapability(_ModeCapability):
 
     async def set_state_default(self, data: 'RequestData', state: Dict[str, Any]):
         new_mode = state["value"]
-        custom_programs = self.entity_config.get(self.custom_source)
+        custom_programs = self.entity_config.get(self.custom_numeric_mode_source)
 
         if custom_programs is None:
             program_list = self.state.attributes.get(self.attr_list, [])
@@ -675,7 +684,7 @@ class ProgramCapability(_NumericModeCapability):
     """Program functionality."""
 
     instance = "program"
-    custom_source = CONF_PROGRAMS
+    custom_numeric_mode_source = CONF_PROGRAMS
 
     program_attributes = {
         (climate.DOMAIN, climate.SUPPORT_PRESET_MODE): (
@@ -689,6 +698,10 @@ class ProgramCapability(_NumericModeCapability):
             light.SERVICE_TURN_ON,
         ),
     }
+
+    @classmethod
+    def _numeric_mode_supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        return bool(cls._get_program_attributes(domain, features))
 
     @classmethod
     def _get_program_attributes(cls, domain: str, features: int):
@@ -710,28 +723,26 @@ class ProgramCapability(_NumericModeCapability):
             self.attr_value = attributes[1]
             self.set_service = attributes[2]
 
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        return bool(cls._get_program_attributes(domain, features))
-
 
 @register_capability
 class InputSourceCapability(_NumericModeCapability):
     """Input Source functionality"""
 
     instance = "input_source"
-    custom_source = CONF_INPUT_SOURCES
+    custom_numeric_mode_source = CONF_INPUT_SOURCES
 
     attr_list = media_player.ATTR_INPUT_SOURCE_LIST
     attr_value = media_player.ATTR_INPUT_SOURCE
     set_service = media_player.SERVICE_SELECT_SOURCE
 
     @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+    def _numeric_mode_supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
-        return domain == media_player.DOMAIN \
-               and features & media_player.SUPPORT_SELECT_SOURCE \
-               and attributes.get(media_player.ATTR_INPUT_SOURCE_LIST) is not None
+        if domain == media_player.DOMAIN and features & media_player.SUPPORT_SELECT_SOURCE:
+            return entity_config.get(CONF_INPUT_SOURCES) is not True or \
+                   attributes.get(media_player.ATTR_INPUT_SOURCE_LIST) is None
+
+        return False
 
 
 @register_capability
@@ -1244,8 +1255,7 @@ class BrightnessCapability(_RangeCapability):
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
-        return domain == light.DOMAIN and \
-               features & light.SUPPORT_BRIGHTNESS
+        return domain == light.DOMAIN and features & light.SUPPORT_BRIGHTNESS
 
     @property
     def min_max_precision(self) -> Tuple[Union[int, float], Union[int, float], Union[int, float]]:
@@ -1287,8 +1297,7 @@ class VolumeCapability(_RangeCapability):
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and features & \
-               media_player.SUPPORT_VOLUME_STEP
+        return domain == media_player.DOMAIN and features & media_player.SUPPORT_VOLUME_STEP
 
     @property
     def random_access(self) -> bool:
@@ -1441,6 +1450,7 @@ class OpenCapability(_RangeCapability):
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         if domain == cover.DOMAIN:
             return features & cover.SUPPORT_SET_POSITION
+
         return False
 
     @property

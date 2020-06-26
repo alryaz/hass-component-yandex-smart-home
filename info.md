@@ -5,7 +5,8 @@
 {% set mainline_num_ver = version_available.replace("v", "").replace(".", "") | int %}{%- set features = {
     'v2.0.0': 'Стандартный релиз; переопределения умений и свойств; настройка на русском',
 }-%}{%- set breaking_changes = namespace(header=True, changes={}) -%}{%- set bug_fixes = namespace(header=True, changes={
-    'v2.0.2': ['Fixed `input_source` capability on default setting']
+    'v2.0.2': ['Fixed `input_source` capability on default setting'],
+    'v2.0.3': ['Исправлены свойства режимов работы'],
 }) -%}
 
 {% if installed %}{% if version_installed == "master" %}
