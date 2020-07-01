@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from ..core.helpers import Config
 
 _LOGGER = logging.getLogger(__name__)
+_LOGGER_REQUEST = logging.getLogger(__name__ + '.request')
+_LOGGER_RESPONSE = logging.getLogger(__name__ + '.response')
 
 
 class YandexSmartHomeUnauthorizedView(HomeAssistantView):
@@ -35,7 +37,7 @@ class YandexSmartHomeUnauthorizedView(HomeAssistantView):
         if not self.config(request):
             return Response(status=404)
 
-        _LOGGER.debug("Request: %s (HEAD)" % request.url)
+        _LOGGER_REQUEST.debug("Request: %s (HEAD)" % request.url)
         return Response(status=200)
 
 
@@ -78,10 +80,10 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
 
         try:
             message = await request.json()
-            _LOGGER.debug("Request: %s (JSON data: %s)" % (request.url, message))
+            _LOGGER_REQUEST.debug("Request: %s (JSON data: %s)" % (request.url, message))
         except JSONDecodeError:
             message = {}
-            _LOGGER.debug("Request: %s (POST data: %s)" % (request.url, await request.text()))
+            _LOGGER_REQUEST.debug("Request: %s (POST data: %s)" % (request.url, await request.text()))
 
         result = await async_handle_message(
             request.app['hass'],
@@ -91,14 +93,14 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
             request.path.replace(self.url, '', 1),
             message)
 
-        _LOGGER.debug("Response: %s", result)
+        _LOGGER_RESPONSE.debug("Response: %s", result)
         return self.json(result)
 
     async def get(self, request: Request) -> Response:
         """Handle Yandex Smart Home GET requests."""
         config, hass_user, request_id = self._process_auth(request)
 
-        _LOGGER.debug("Request: %s" % request.url)
+        _LOGGER_REQUEST.debug("Request: %s" % request.url)
         result = await async_handle_message(
             request.app['hass'],
             config,
@@ -107,5 +109,5 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
             request.path.replace(self.url, '', 1),
             {})
 
-        _LOGGER.debug("Response: %s" % result)
+        _LOGGER_RESPONSE.debug("Response: %s" % result)
         return self.json(result)

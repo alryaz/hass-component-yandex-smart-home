@@ -1,6 +1,6 @@
 """Implement the Yandex Smart Home capabilities."""
 import logging
-from typing import Any, Optional, Dict, TYPE_CHECKING, Tuple, Type, List, Union, Mapping, Sequence, Callable
+from typing import Any, Optional, Dict, TYPE_CHECKING, Tuple, Type, List, Union, Mapping, Sequence, Callable, Iterable
 
 from homeassistant.components import (
     automation,
@@ -29,7 +29,6 @@ from homeassistant.const import (
     SERVICE_OPEN_COVER,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
-    SERVICE_VOLUME_MUTE,
     SERVICE_LOCK,
     SERVICE_UNLOCK,
     STATE_OFF,
@@ -70,6 +69,26 @@ def register_capability(capability):
     """Decorate a function to register a capability."""
     CAPABILITIES.append(capability)
     return capability
+
+
+class _CompatibilityConfig:
+    def __init__(self, domain: str, required_feature: Optional[int] = None,
+                 retrievable_feature: Optional[int] = None):
+        self.domain = domain
+        self.required_feature = required_feature
+        self.retrievable_feature = retrievable_feature
+
+    def __repr__(self):
+        return '<{}[{}]>'.format(self.__class__.__name__, ', '.join([
+            '{}={}'.format(k, v)
+            for k, v in self.__dict__.items()
+        ]))
+
+    def __str__(self):
+        return self.__class__.__name__ + '(' + self.domain + ')'
+
+    def is_compatible(self, domain: str, features: int, attributes: Dict[str, Any]) -> bool:
+        return self.domain == domain and (self.required_feature is None or features & self.required_feature)
 
 
 class _Capability(object):
@@ -162,6 +181,45 @@ class _Capability(object):
     async def set_state_override(self, data: 'RequestData', state: Dict) -> None:
         """Set device state using override."""
         raise OverrideNotImplemented(self.__class__)
+
+
+class _CompatibleCapability(_Capability):
+    _compatibility_configs: Sequence[_CompatibilityConfig] = NotImplemented
+    compatibility_config: _CompatibilityConfig = None
+
+    def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict[str, Any]):
+        super().__init__(hass, state, entity_config)
+        attributes = state.attributes
+        self.compatibility_config = self.get_compatibility_config(
+            domain=state.domain,
+            features=attributes.get(ATTR_SUPPORTED_FEATURES, 0),
+            attributes=attributes
+        ) if not self.use_override else None
+
+    @property
+    def retrievable(self):
+        if self.use_override:
+            return True
+        conf = self.compatibility_config
+        return (
+                conf.retrievable_feature is None
+                or self.state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+                & conf.retrievable_feature
+        )
+
+    @classmethod
+    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
+        """Determine whether mode capability is supported."""
+        return cls.get_compatibility_config(domain, features, attributes) is not None
+
+    @classmethod
+    def get_compatibility_config(cls, domain: str, features: int, attributes: Dict[str, Any]):
+        if cls._compatibility_configs is NotImplemented:
+            return None
+
+        for config in cls._compatibility_configs:
+            if config.is_compatible(domain, features, attributes):
+                return config
 
 
 @register_capability
@@ -288,12 +346,12 @@ class OnOffCapability(_Capability):
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
         if domain == media_player.DOMAIN:
-            return features & media_player.SUPPORT_TURN_ON and features & media_player.SUPPORT_TURN_OFF
+            return bool(features & media_player.SUPPORT_TURN_ON and features & media_player.SUPPORT_TURN_OFF)
 
         if domain == vacuum.DOMAIN:
-            return (features & vacuum.SUPPORT_START and (
+            return bool((features & vacuum.SUPPORT_START and (
                     features & vacuum.SUPPORT_RETURN_HOME or features & vacuum.SUPPORT_STOP)) or (
-                               features & vacuum.SUPPORT_TURN_ON and features & vacuum.SUPPORT_TURN_OFF)
+                                features & vacuum.SUPPORT_TURN_ON and features & vacuum.SUPPORT_TURN_OFF))
 
         if domain == water_heater.DOMAIN and features & water_heater.SUPPORT_OPERATION_MODE:
             operation_list = attributes.get(water_heater.ATTR_OPERATION_LIST)
@@ -331,17 +389,81 @@ class OnOffCapability(_Capability):
         await self.issue_state_command(self.hass, self.state, data, state)
 
 
-class _ToggleCapability(_Capability):
+class ToggleCapabilityConfig(_CompatibilityConfig):
+    def __init__(self, domain: str,
+                 service_id_on: str,
+                 state_attr: Optional[str] = None,
+                 service_id_off: Optional[str] = None,
+                 service_attr: Optional[str] = None,
+                 required_feature: Optional[int] = None,
+                 retrievable_feature: Optional[int] = None,
+                 comp_state: Optional[Tuple[str, bool]] = None):
+        super().__init__(
+            domain=domain,
+            required_feature=required_feature,
+            retrievable_feature=retrievable_feature
+        )
+        self.state_attr = state_attr
+        self.service_id_on = service_id_on
+        self.service_id_off = service_id_off
+        self.service_attr = service_attr
+        self.comp_state = comp_state
+
+
+class _ToggleCapability(_CompatibleCapability):
     """Base toggle functionality.
 
     https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/toggle-docpage/
     """
     type = CAPABILITIES_TOGGLE
 
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        return False
+    _capability_configs: Sequence[ToggleCapabilityConfig] = NotImplemented
+    compatibility_config: ToggleCapabilityConfig = None
 
+    def get_value_default(self) -> Optional[Union[str, float, int]]:
+        """Return the state value of this capability for this entity."""
+        conf = self.compatibility_config
+        comp_state = conf.comp_state
+
+        if conf.state_attr is not None:
+            state = self.state.attributes.get(conf.state_attr)
+            if state is None:
+                raise SmartHomeError(ERR_NOT_SUPPORTED_IN_CURRENT_MODE, "Device probably turned off")
+            if comp_state is None:
+                return bool(state)
+            return (state == comp_state[0]) is comp_state[1]
+        return (self.state.state == comp_state[0]) is comp_state[1]
+
+    async def set_state(self, data: 'RequestData', state: Dict):
+        """Set device state."""
+        new_state = state['value']
+        if type(new_state) is not bool:
+            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
+
+        state = self.state
+        conf = self.compatibility_config
+
+        # Test for attribute existence
+        if conf.state_attr is not None and state.attributes.get(conf.state_attr) is None:
+            raise SmartHomeError(ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
+                                 "Device probably turned off")
+
+        # Select service
+        if conf.service_id_off is None:
+            service_id, service_data = (conf.service_id_on, {conf.service_attr: new_state})
+        else:
+            service_data = {ATTR_ENTITY_ID: state.entity_id}
+            service_id = conf.service_id_on if new_state else conf.service_id_off
+
+        await self.hass.services.async_call(
+            domain=state.domain,
+            service=service_id,
+            service_data=service_data,
+            blocking=True,
+            context=data.context
+        )
+
+    # Override config
     @classmethod
     def has_override(cls, domain: str, entity_config: Dict, attributes: Dict) -> bool:
         """Determine whether toggle capability has an override."""
@@ -349,9 +471,7 @@ class _ToggleCapability(_Capability):
 
     def parameters(self):
         """Return parameters for a devices request."""
-        return {
-            'instance': self.instance
-        }
+        return {"instance": self.instance}
 
     @classmethod
     def get_override_entity_id(cls, entity_config: Dict) -> Optional[str]:
@@ -411,33 +531,14 @@ class MuteCapability(_ToggleCapability):
 
     instance = "mute"
 
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        """Test if state is supported."""
-        return domain == media_player.DOMAIN and features & media_player.SUPPORT_VOLUME_MUTE
-
-    def get_value_default(self) -> Optional[Union[str, float, int]]:
-        """Return the state value of this capability for this entity."""
-        muted = self.state.attributes.get(media_player.ATTR_MEDIA_VOLUME_MUTED)
-
-        return bool(muted)
-
-    async def set_state(self, data: 'RequestData', state: Dict):
-        """Set device state."""
-        if type(state['value']) is not bool:
-            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
-
-        muted = self.state.attributes.get(media_player.ATTR_MEDIA_VOLUME_MUTED)
-        if muted is None:
-            raise SmartHomeError(ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
-                                 "Device probably turned off")
-
-        await self.hass.services.async_call(
-            self.state.domain,
-            SERVICE_VOLUME_MUTE, {
-                ATTR_ENTITY_ID: self.state.entity_id,
-                media_player.ATTR_MEDIA_VOLUME_MUTED: state['value']
-            }, blocking=True, context=data.context)
+    _capability_configs = [
+        ToggleCapabilityConfig(
+            domain=media_player.DOMAIN,
+            required_feature=media_player.SUPPORT_VOLUME_MUTE,
+            state_attr=media_player.ATTR_MEDIA_VOLUME_MUTED,
+            service_id_on=media_player.SERVICE_VOLUME_MUTE
+        )
+    ]
 
 
 @register_capability
@@ -446,25 +547,14 @@ class OscillationCapability(_ToggleCapability):
 
     instance = "oscillation"
 
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        return domain == fan.DOMAIN and \
-            features & fan.SUPPORT_OSCILLATE
-
-    def get_value_default(self) -> Optional[Union[str, float, int]]:
-        """Return the state of oscillation for this entity."""
-        return bool(self.state.attributes.get(fan.ATTR_OSCILLATING))
-
-    async def set_state(self, data: 'RequestData', state: dict):
-        if not isinstance(state['value'], bool):
-            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
-
-        await self.hass.services.async_call(
-            fan.DOMAIN,
-            fan.SERVICE_OSCILLATE, {
-                ATTR_ENTITY_ID: self.state.entity_id,
-                fan.ATTR_OSCILLATING: state['value']
-            }, blocking=True, context=data.context)
+    _capability_configs = [
+        ToggleCapabilityConfig(
+            domain=fan.DOMAIN,
+            required_feature=fan.SUPPORT_OSCILLATE,
+            service_attr=fan.ATTR_OSCILLATING,
+            service_id_on=fan.ATTR_OSCILLATING,
+        )
+    ]
 
 
 @register_capability
@@ -473,55 +563,25 @@ class PauseCapability(_ToggleCapability):
 
     instance = "pause"
 
-    def __init__(self, hass: HomeAssistantType, state: State, entity_config: dict):
-        super().__init__(hass, state, entity_config)
-        self.retrievable = state.domain == media_player.DOMAIN or state.domain == vacuum.DOMAIN and (
-                state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) & vacuum.SUPPORT_STATE
+    _capability_configs = [
+        ToggleCapabilityConfig(
+            domain=media_player.DOMAIN,
+            required_feature=media_player.SUPPORT_PLAY | media_player.SUPPORT_PAUSE,
+            service_id_on=media_player.SERVICE_MEDIA_PLAY,
+            service_id_off=media_player.SERVICE_MEDIA_PAUSE,
+            comp_state=(media_player.STATE_PLAYING, False),
+        ),
+        ToggleCapabilityConfig(
+            domain=vacuum.DOMAIN,
+            required_feature=vacuum.SUPPORT_PAUSE & vacuum.SUPPORT_START,
+            service_id_on=vacuum.SERVICE_START,
+            service_id_off=vacuum.SERVICE_PAUSE,
+            comp_state=(vacuum.STATE_PAUSED, True),
         )
-
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        if domain == media_player.DOMAIN:
-            return features & media_player.SUPPORT_PLAY and \
-                features & media_player.SUPPORT_PAUSE
-        elif domain == vacuum.DOMAIN:
-            return features & vacuum.SUPPORT_PAUSE
-        return False
-
-    def get_value_default(self) -> Optional[Union[str, float, int]]:
-        """Return the state value of this capability for this entity."""
-        return self.state.state != media_player.STATE_PLAYING
-
-    async def set_state(self, data: 'RequestData', state: Dict):
-        """Set device state."""
-        if type(state['value']) is not bool:
-            raise SmartHomeError(ERR_INVALID_VALUE, "Value is not boolean")
-
-        domain = self.state.domain
-        new_state = state['value']
-        service = ''
-        service_data = {
-            ATTR_ENTITY_ID: self.state.entity_id,
-        }
-
-        if domain == media_player.DOMAIN:
-            service = media_player.SERVICE_MEDIA_PAUSE if new_state else \
-                media_player.SERVICE_MEDIA_PLAY
-
-        elif domain == vacuum.DOMAIN:
-            service = vacuum.SERVICE_PAUSE if new_state else \
-                vacuum.SERVICE_START
-
-        await self.hass.services.async_call(
-            domain,
-            service,
-            service_data,
-            blocking=True,
-            context=data.context
-        )
+    ]
 
 
-class ModeCapabilityConfig:
+class ModeCompatibilityConfig(_CompatibilityConfig):
     def __init__(self,
                  domain: str,
                  mode_attr: str, modes_list_attr: str,
@@ -529,7 +589,7 @@ class ModeCapabilityConfig:
                  default_modes_mapping: Optional[Dict[str, str]] = None,
                  compatibility_checker: Optional[Callable[[str, int, Dict[str, Any]], bool]] = None,
                  required_feature: Optional[int] = None):
-        self.domain = domain
+        super().__init__(domain)
         self.mode_attr = mode_attr
         self.modes_list_attr = modes_list_attr
         self.service_id = service_id
@@ -570,7 +630,14 @@ class ModeCapabilityConfig:
         return {ha: ya for ha, ya in self._default_modes_mapping.items() if ha in modes_list}
 
 
-class _ModeCapability(_Capability):
+class RangeEnum:
+    def __init__(self, range1: Tuple[float, str], range2: Tuple[float, str], *args, enum_low: str, enum_high: str):
+        self.enum_low = enum_low
+        self.enum_high = enum_high
+        self.ranges = dict(sorted([range1, range2, *args]))
+
+
+class _ModeCapability(_CompatibleCapability):
     """Base class of capabilities with mode functionality like thermostat mode
     or fan speed.
 
@@ -587,30 +654,17 @@ class _ModeCapability(_Capability):
 
     # Service with domain to call for setting new value
     # Must be implemented, unless mode is override-only
-    # (Domain, Required feature) -> (
-    #     Value attribute,
-    #     Values list attribute,
-    #     Service ID | (Service ID, Service mode attribute)
-    # )
-    _compatibility_configs: Sequence[ModeCapabilityConfig] = NotImplemented
+    # (Domain, Required feature) -> Mode Compatibility Config
+    _compatibility_configs: Iterable[ModeCompatibilityConfig] = NotImplemented
+    compatibility_config: Optional[ModeCompatibilityConfig] = None
 
     def __init__(self, hass: HomeAssistantType, state: State, entity_config: Dict):
         """Mode capability initializer."""
         super().__init__(hass, state, entity_config)
         if self.use_override:
-            self.compatibility_config = None
-
             # Generate set script
             override_config = self.get_override_config(entity_config)
             self.set_script = Script(hass, override_config[CONF_SET_SCRIPT])
-        else:
-            self.set_script = None
-
-            self.compatibility_config = self.get_capability_config(
-                domain=state.domain,
-                features=state.attributes.get(ATTR_SUPPORTED_FEATURES, 0),
-                attributes=state.attributes,
-            )
 
     # Intended for overriding
     @classmethod
@@ -625,21 +679,6 @@ class _ModeCapability(_Capability):
                 return dict(custom_modes)
 
     # Default implementations
-    @classmethod
-    def get_capability_config(cls, domain: str, features: int, attributes: Dict) -> Optional[ModeCapabilityConfig]:
-        """Get compatibility config according entity domain and features"""
-        if cls._compatibility_configs is NotImplemented:
-            return None
-
-        for config in cls._compatibility_configs:
-            if config.is_compatible(domain, features, attributes):
-                return config
-
-    @classmethod
-    def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
-        """Determine whether mode capability is supported."""
-        return cls.get_capability_config(domain, features, attributes) is not None
-
     def get_modes_mapping(self) -> Optional[Dict[str, str]]:
         """
         Get modes mapping of entity modes to Yandex modes (HA => Yandex).
@@ -660,7 +699,7 @@ class _ModeCapability(_Capability):
             "instance": self.instance,
             "modes": [
                 {"value": v}
-                for v in self.get_modes_mapping().keys()
+                for v in set(self.get_modes_mapping().values())
             ]
         }
 
@@ -680,15 +719,19 @@ class _ModeCapability(_Capability):
         mapping = self.get_modes_mapping()
         new_mode = state["value"]
 
-        if new_mode not in mapping.keys():
+        yandex_modes = list(mapping.values())
+
+        if new_mode not in yandex_modes:
             raise SmartHomeError(ERR_INVALID_VALUE, "Unacceptable value")
+
+        new_ent_mode = list(mapping.keys())[yandex_modes.index(new_mode)]
 
         await self.hass.services.async_call(
             domain=self.state.domain,
             service=self.compatibility_config.service_id,
             service_data={
                 ATTR_ENTITY_ID: self.state.entity_id,
-                self.compatibility_config.service_attr: mapping[new_mode]
+                self.compatibility_config.service_attr: new_ent_mode
             },
             blocking=True,
             context=data.context
@@ -762,14 +805,14 @@ class ProgramCapability(_ModeCapability):
     internal_modes = MODES_NUMERIC
 
     _compatibility_configs = [
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=climate.DOMAIN,
             mode_attr=climate.ATTR_PRESET_MODE,
             modes_list_attr=climate.ATTR_PRESET_MODES,
             service_id=climate.SERVICE_SET_PRESET_MODE,
             required_feature=climate.SUPPORT_PRESET_MODE,
         ),
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=light.DOMAIN,
             mode_attr=light.ATTR_EFFECT,
             modes_list_attr=light.ATTR_EFFECT_LIST,
@@ -788,7 +831,7 @@ class InputSourceCapability(_ModeCapability):
     internal_modes = MODES_NUMERIC
 
     _compatibility_configs = [
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=media_player.DOMAIN,
             mode_attr=media_player.ATTR_INPUT_SOURCE,
             modes_list_attr=media_player.ATTR_INPUT_SOURCE_LIST,
@@ -806,7 +849,7 @@ class ThermostatCapability(_ModeCapability):
     internal_modes = ('auto', 'cool', 'dry', 'fan_only', 'heat', 'preheat')
 
     _compatibility_configs = {
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=climate.DOMAIN,
             mode_attr=climate.ATTR_HVAC_MODE,
             modes_list_attr=climate.ATTR_HVAC_MODES,
@@ -821,7 +864,6 @@ class ThermostatCapability(_ModeCapability):
         )
     }
 
-
 @register_capability
 class FanSpeedCapability(_ModeCapability):
     """Fan speed functionality."""
@@ -830,14 +872,14 @@ class FanSpeedCapability(_ModeCapability):
     internal_modes = ("auto", "low", "medium", "high", "turbo")
 
     __default_modes_mapping = {m: k for k, v in {
-        internal_modes[0]: ['auto'],
-        internal_modes[1]: ['low', 'min', 'silent', 'minimum'],
+        internal_modes[0]: ['auto', 'Automatic'],
+        internal_modes[1]: ['low', 'min', 'minimum', 'Quiet', 'silent'],
         internal_modes[2]: ['medium', 'middle'],
-        internal_modes[3]: ['high', 'max', 'strong', 'favorite', 'maximum'],
+        internal_modes[3]: ['favorite', 'high', 'max', 'Max', 'maximum', 'strong'],
     }.items() for m in v}
 
     _compatibility_configs = {
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=fan.DOMAIN,
             mode_attr=fan.ATTR_SPEED,
             modes_list_attr=fan.ATTR_SPEED_LIST,
@@ -845,7 +887,7 @@ class FanSpeedCapability(_ModeCapability):
             required_feature=fan.SUPPORT_SET_SPEED,
             default_modes_mapping=__default_modes_mapping,
         ),
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=climate.DOMAIN,
             mode_attr=climate.ATTR_FAN_MODE,
             modes_list_attr=climate.ATTR_FAN_MODES,
@@ -853,7 +895,7 @@ class FanSpeedCapability(_ModeCapability):
             required_feature=climate.SUPPORT_FAN_MODE,
             default_modes_mapping=__default_modes_mapping,
         ),
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=vacuum.DOMAIN,
             mode_attr=vacuum.ATTR_FAN_SPEED,
             modes_list_attr=vacuum.ATTR_FAN_SPEED_LIST,
@@ -884,7 +926,7 @@ class SwingCapability(_ModeCapability):
     internal_modes = ("auto", "horizontal", "stationary", "vertical")
 
     _compatibility_configs = [
-        ModeCapabilityConfig(
+        ModeCompatibilityConfig(
             domain=climate.DOMAIN,
             mode_attr=climate.ATTR_SWING_MODE,
             modes_list_attr=climate.ATTR_SWING_MODES,
@@ -1200,7 +1242,7 @@ class VolumeCapability(_RangeCapability):
     @classmethod
     def supported(cls, domain: str, features: int, entity_config: Dict, attributes: Dict) -> bool:
         """Test if state is supported."""
-        return domain == media_player.DOMAIN and features & media_player.SUPPORT_VOLUME_STEP
+        return bool(domain == media_player.DOMAIN and features & media_player.SUPPORT_VOLUME_STEP)
 
     @property
     def random_access(self) -> bool:
