@@ -17,7 +17,7 @@ from homeassistant.const import (
     POWER_WATT, DEVICE_CLASS_BATTERY, UNIT_PERCENTAGE, CONF_ENTITY_ID,
 )
 
-from custom_components.yandex_smart_home.const import (
+from ..const import (
     CONF_ENTITY_PROPERTIES,
     CONF_ATTRIBUTE,
     ATTR_CURRENT_POWER_W,

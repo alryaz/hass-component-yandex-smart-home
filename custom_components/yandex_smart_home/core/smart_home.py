@@ -6,12 +6,12 @@ from homeassistant.const import CLOUD_NEVER_EXPOSED_ENTITIES
 from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.util.decorator import Registry
 
-from custom_components.yandex_smart_home.const import (
+from ..const import (
     ERR_INTERNAL_ERROR, ERR_DEVICE_UNREACHABLE,
     ERR_DEVICE_NOT_FOUND, ATTR_YANDEX_TYPE
 )
-from custom_components.yandex_smart_home.core.error import SmartHomeError
-from custom_components.yandex_smart_home.core.helpers import RequestData, YandexEntity
+from ..core.error import SmartHomeError
+from ..core.helpers import RequestData, YandexEntity
 
 HANDLERS = Registry()
 _LOGGER = logging.getLogger(__name__)

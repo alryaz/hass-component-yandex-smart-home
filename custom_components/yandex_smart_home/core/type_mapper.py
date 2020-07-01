@@ -21,7 +21,7 @@ from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_SUPPORTED_FEATURES
 from homeassistant.core import State
 from homeassistant.helpers.typing import HomeAssistantType
 
-from custom_components.yandex_smart_home.const import (
+from ..const import (
     TYPE_OTHER,
     TYPE_THERMOSTAT,
     TYPE_THERMOSTAT_AC,

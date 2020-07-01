@@ -74,7 +74,12 @@ def check_mode_override_mappings(value: Dict[str, Any]):
     return value
 
 
-NUMERIC_MODE_SCHEMA = vol.Any(cv.boolean, {vol.In(MODES_NUMERIC): cv.string})
+NUMERIC_MODE_VALIDATOR = vol.In(MODES_NUMERIC)
+NUMERIC_MODE_SCHEMA = vol.Any(
+    cv.boolean,
+    {NUMERIC_MODE_VALIDATOR: cv.string},
+    vol.All([NUMERIC_MODE_VALIDATOR], vol.Length(min=2, max=10))
+)
 PROPERTY_OVERRIDES_SCHEMA = vol.All({PROPERTY_INSTANCE_SCHEMA: ENTITY_PROPERTY_SCHEMA})
 TOGGLE_OVERRIDES_SCHEMA = vol.All({TOGGLE_INSTANCE_SCHEMA: cv.entity_id})
 MODE_OVERRIDES_SCHEMA = vol.All(
@@ -131,8 +136,8 @@ ENTITY_SCHEMA = vol.Schema(
 
         # Numeric mode capabilities
         # (True - enable automatic, False - disable, dictionary - custom modes)
-        vol.Optional(CONF_INPUT_SOURCES, default=True): NUMERIC_MODE_SCHEMA,
-        vol.Optional(CONF_PROGRAMS, default=True): NUMERIC_MODE_SCHEMA,
+        vol.Optional(CONF_INPUT_SOURCES): NUMERIC_MODE_SCHEMA,
+        vol.Optional(CONF_PROGRAMS): NUMERIC_MODE_SCHEMA,
 
         # Overrides
         vol.Optional(CONF_ENTITY_PROPERTIES, default={}): PROPERTY_OVERRIDES_SCHEMA,

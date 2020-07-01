@@ -10,13 +10,13 @@ from homeassistant.const import (
 from homeassistant.core import Context, callback, State
 from homeassistant.helpers.typing import HomeAssistantType
 
-from custom_components.yandex_smart_home.const import (
+from ..const import (
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE, ERR_DEVICE_UNREACHABLE,
     ERR_INVALID_VALUE, CONF_ROOM, CONF_TYPE
 )
-from custom_components.yandex_smart_home.core.error import SmartHomeError
-from custom_components.yandex_smart_home.core.type_mapper import determine_state_type
-from custom_components.yandex_smart_home.functions import prop, capability
+from ..core.error import SmartHomeError
+from ..core.type_mapper import determine_state_type
+from ..functions import prop, capability
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceEntry

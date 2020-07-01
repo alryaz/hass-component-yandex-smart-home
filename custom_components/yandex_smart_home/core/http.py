@@ -1,6 +1,6 @@
 """Support for Yandex Smart Home."""
 import logging
-from json import loads
+from json import JSONDecodeError
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Tuple, Union, Optional
 from uuid import uuid4
@@ -9,12 +9,12 @@ from aiohttp.web import Request, Response
 from aiohttp.web_exceptions import HTTPUnauthorized, HTTPBadRequest, HTTPNotFound
 from homeassistant.components.http import HomeAssistantView
 
-from custom_components.yandex_smart_home.const import DOMAIN
-from custom_components.yandex_smart_home.core.smart_home import async_handle_message
+from ..const import DOMAIN
+from ..core.smart_home import async_handle_message
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
-    from custom_components.yandex_smart_home.core.helpers import Config
+    from ..core.helpers import Config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,9 +76,13 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
         """Handle Yandex Smart Home POST requests."""
         config, hass_user, request_id = self._process_auth(request)
 
-        request_body = await request.text()
-        message = loads(request_body) if request_body else {}
-        _LOGGER.debug("Request: %s (POST data: %s)" % (request.url, message))
+        try:
+            message = await request.json()
+            _LOGGER.debug("Request: %s (JSON data: %s)" % (request.url, message))
+        except JSONDecodeError:
+            message = {}
+            _LOGGER.debug("Request: %s (POST data: %s)" % (request.url, await request.text()))
+
         result = await async_handle_message(
             request.app['hass'],
             config,
