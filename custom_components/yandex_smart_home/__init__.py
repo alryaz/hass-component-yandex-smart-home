@@ -4,7 +4,8 @@ __all__ = [
 ]
 
 import logging
-from typing import Any, Dict, TYPE_CHECKING
+from ipaddress import IPv4Network, IPv6Network, collapse_addresses
+from typing import Any, Dict, TYPE_CHECKING, Union, Sequence, List
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -147,11 +148,38 @@ ENTITY_SCHEMA = vol.Schema(
     }
 )
 
+
+def validate_networks(value: Union[bool, Sequence[str]]) -> Union[bool, List[Union[IPv6Network, IPv4Network]]]:
+    if value is True:
+        return [IPv4Network('0.0.0.0/0'), IPv6Network('::/0')]
+
+    if not value:
+        return []
+
+    converted_networks_ipv4 = []
+    converted_networks_ipv6 = []
+    for i, network in enumerate(value):
+        try:
+            if ':' in value:
+                converted_networks_ipv6.append(IPv6Network(network))
+            else:
+                converted_networks_ipv4.append(IPv4Network(network))
+        except ValueError:
+            raise vol.Invalid("invalid network provided", path=[i])
+
+    if not converted_networks_ipv6:
+        return list(collapse_addresses(converted_networks_ipv4))
+    elif not converted_networks_ipv4:
+        return list(collapse_addresses(converted_networks_ipv6))
+    return [*collapse_addresses(converted_networks_ipv4), *collapse_addresses(converted_networks_ipv6)]
+
+
 YANDEX_SMART_HOME_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_FILTER, default={}): ef.FILTER_SCHEMA,
         vol.Optional(CONF_ENTITY_CONFIG, default={}): {cv.entity_id: ENTITY_SCHEMA},
-        vol.Optional(CONF_DIAGNOSTICS_MODE, default=False): cv.boolean,
+        vol.Optional(CONF_DIAGNOSTICS_MODE, default=False):
+            vol.All(vol.Any(cv.boolean, vol.All(cv.ensure_list, [cv.string])), validate_networks),
     }
 )
 
@@ -226,8 +254,9 @@ async def async_setup_entry(hass: HomeAssistantType, config_entry: ConfigEntry):
         from homeassistant.components.persistent_notification import async_create as create_notification
         from custom_components.yandex_smart_home.core.http import YandexSmartHomeView
 
-        warning_text = "Diagnostics mode is enabled. Your Yandex Smart home setup will become vulnerable to external " \
-                       "unauthorized requests. Please, use with caution."
+        warning_text = "Diagnostics mode is enabled. Your Yandex Smart home setup may become vulnerable to external " \
+                       "unauthorized requests. Please, use with caution. Unauthorized requests from the following" \
+                       " networks are currently allowed: %s" % (', '.join(map(str, diagnostics_mode)))
 
         contents_links = "Links (will open in a new tab):"
 

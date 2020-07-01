@@ -1,4 +1,5 @@
 """Helper classes for Yandex Smart Home integration."""
+import ipaddress
 import logging
 from asyncio import gather
 from collections.abc import Mapping
@@ -58,7 +59,8 @@ def get_child_instances(source: List[AnyInstanceType], _type: Optional[str] = No
 class Config:
     """Hold the configuration for Yandex Smart Home."""
 
-    def __init__(self, should_expose, entity_config=None, diagnostics_mode=False):
+    def __init__(self, should_expose, entity_config=None,
+                 diagnostics_mode: Union[bool, ipaddress.IPv4Network, ipaddress.IPv6Network] = False):
         """Initialize the configuration."""
         self.should_expose = should_expose
         self.entity_config = entity_config or {}

@@ -1,4 +1,5 @@
 """Support for Yandex Smart Home."""
+import ipaddress
 import logging
 from json import JSONDecodeError
 from types import SimpleNamespace
@@ -61,7 +62,15 @@ class YandexSmartHomeView(YandexSmartHomeUnauthorizedView):
 
         hass_user = request.get('hass_user')
         request_id = request.headers.get('X-Request-Id')
+        remote_accepted = False
         if config.diagnostics_mode:
+            remote_address = ipaddress.ip_address(request.remote)
+            for network in config.diagnostics_mode:
+                if remote_address in network:
+                    remote_accepted = True
+                    break
+                    
+        if remote_accepted:
             # Facilitate the use of diagnostics mode by adding dummy data to the request
             if not hass_user:
                 hass_user = SimpleNamespace(id=999999)

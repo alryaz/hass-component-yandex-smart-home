@@ -3,7 +3,9 @@
   "name": "Yandex Smart Home",
   "documentation": "https://github.com/alryaz/hass-component-yandex-smart-home",
   "issue_tracker": "https://github.com/alryaz/hass-component-yandex-smart-home/issues",
-  "requirements": [],
+  "requirements": [
+    "ipaddress"
+  ],
   "dependencies": [
     "http"
   ],
