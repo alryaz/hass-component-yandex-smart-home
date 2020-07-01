@@ -394,7 +394,6 @@ class ToggleCapabilityConfig(_CompatibilityConfig):
                  service_id_on: str,
                  state_attr: Optional[str] = None,
                  service_id_off: Optional[str] = None,
-                 service_attr: Optional[str] = None,
                  required_feature: Optional[int] = None,
                  retrievable_feature: Optional[int] = None,
                  comp_state: Optional[Tuple[str, bool]] = None):
@@ -403,10 +402,10 @@ class ToggleCapabilityConfig(_CompatibilityConfig):
             required_feature=required_feature,
             retrievable_feature=retrievable_feature
         )
+
         self.state_attr = state_attr
         self.service_id_on = service_id_on
         self.service_id_off = service_id_off
-        self.service_attr = service_attr
         self.comp_state = comp_state
 
 
@@ -417,7 +416,7 @@ class _ToggleCapability(_CompatibleCapability):
     """
     type = CAPABILITIES_TOGGLE
 
-    _capability_configs: Sequence[ToggleCapabilityConfig] = NotImplemented
+    _compatibility_configs: Sequence[ToggleCapabilityConfig] = NotImplemented
     compatibility_config: ToggleCapabilityConfig = None
 
     def get_value_default(self) -> Optional[Union[str, float, int]]:
@@ -428,13 +427,13 @@ class _ToggleCapability(_CompatibleCapability):
         if conf.state_attr is not None:
             state = self.state.attributes.get(conf.state_attr)
             if state is None:
-                raise SmartHomeError(ERR_NOT_SUPPORTED_IN_CURRENT_MODE, "Device probably turned off")
+                return False
             if comp_state is None:
                 return bool(state)
             return (state == comp_state[0]) is comp_state[1]
         return (self.state.state == comp_state[0]) is comp_state[1]
 
-    async def set_state(self, data: 'RequestData', state: Dict):
+    async def set_state_default(self, data: 'RequestData', state: Dict) -> None:
         """Set device state."""
         new_state = state['value']
         if type(new_state) is not bool:
@@ -449,11 +448,14 @@ class _ToggleCapability(_CompatibleCapability):
                                  "Device probably turned off")
 
         # Select service
+        service_id = conf.service_id_on
+        service_data = {ATTR_ENTITY_ID: self.state.entity_id}
         if conf.service_id_off is None:
-            service_id, service_data = (conf.service_id_on, {conf.service_attr: new_state})
-        else:
-            service_data = {ATTR_ENTITY_ID: state.entity_id}
-            service_id = conf.service_id_on if new_state else conf.service_id_off
+            service_data[conf.state_attr] = new_state
+        elif new_state is False:
+            service_id = conf.service_id_off
+
+        service_data[ATTR_ENTITY_ID] = self.state.entity_id
 
         await self.hass.services.async_call(
             domain=state.domain,
@@ -531,12 +533,12 @@ class MuteCapability(_ToggleCapability):
 
     instance = "mute"
 
-    _capability_configs = [
+    _compatibility_configs = [
         ToggleCapabilityConfig(
             domain=media_player.DOMAIN,
             required_feature=media_player.SUPPORT_VOLUME_MUTE,
             state_attr=media_player.ATTR_MEDIA_VOLUME_MUTED,
-            service_id_on=media_player.SERVICE_VOLUME_MUTE
+            service_id_on=media_player.SERVICE_VOLUME_MUTE,
         )
     ]
 
@@ -547,11 +549,11 @@ class OscillationCapability(_ToggleCapability):
 
     instance = "oscillation"
 
-    _capability_configs = [
+    _compatibility_configs = [
         ToggleCapabilityConfig(
             domain=fan.DOMAIN,
             required_feature=fan.SUPPORT_OSCILLATE,
-            service_attr=fan.ATTR_OSCILLATING,
+            state_attr=fan.ATTR_OSCILLATING,
             service_id_on=fan.ATTR_OSCILLATING,
         )
     ]
@@ -563,7 +565,7 @@ class PauseCapability(_ToggleCapability):
 
     instance = "pause"
 
-    _capability_configs = [
+    _compatibility_configs = [
         ToggleCapabilityConfig(
             domain=media_player.DOMAIN,
             required_feature=media_player.SUPPORT_PLAY | media_player.SUPPORT_PAUSE,
